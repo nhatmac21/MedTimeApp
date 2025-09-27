@@ -64,3 +64,17 @@ export async function deleteMedication(id) {
     return { success: false, error: error.message };
   }
 }
+
+export async function deleteMedicationByNameAndTime(name, time) {
+  try {
+    const existing = await loadMedications();
+    const updated = existing.filter(med => 
+      !(med.name === name && med.times.some(t => t.time === time))
+    );
+    await saveMedications(updated);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete medication:', error);
+    return { success: false, error: error.message };
+  }
+}

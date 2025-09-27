@@ -125,7 +125,7 @@ export default function EditorScreen({ navigation }) {
         style={styles.container}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Thêm thuốc mới</Text>
+          <Text style={styles.title}>Thêm nhắc nhở mới</Text>
           <TouchableOpacity style={styles.resetBtn} onPress={resetForm}>
             <Ionicons name="refresh-outline" size={20} color={Colors.textMuted} />
           </TouchableOpacity>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 
@@ -47,37 +47,42 @@ export default function MedicationPicker({ onSelect, selectedMed }) {
         <Ionicons name="chevron-down" size={20} color={Colors.textMuted} />
       </TouchableOpacity>
       
-      {showList && (
-        <View style={styles.dropdown}>
-          <FlatList
-            data={filtered}
-            keyExtractor={item => item.id}
-            maxToRenderPerBatch={10}
-            renderItem={({ item }) => (
-              <TouchableOpacity 
-                style={[styles.option, selectedMed?.id === item.id && styles.selectedOption]} 
-                onPress={() => handleSelect(item)}
-              >
-                <Text style={[styles.optionText, selectedMed?.id === item.id && styles.selectedText]}>
-                  {item.name}
-                </Text>
-                <Text style={styles.dosageHint}>
-                  {item.dosages.slice(0, 2).join(', ')}...
-                </Text>
+      <Modal visible={showList} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chọn thuốc</Text>
+              <TouchableOpacity onPress={() => setShowList(false)}>
+                <Ionicons name="close" size={24} color={Colors.textMuted} />
               </TouchableOpacity>
-            )}
-          />
-          <TouchableOpacity style={styles.closeBtn} onPress={() => setShowList(false)}>
-            <Text style={styles.closeBtnText}>Đóng</Text>
-          </TouchableOpacity>
+            </View>
+            <FlatList
+              data={filtered}
+              keyExtractor={item => item.id}
+              style={styles.modalList}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={[styles.option, selectedMed?.id === item.id && styles.selectedOption]} 
+                  onPress={() => handleSelect(item)}
+                >
+                  <Text style={[styles.optionText, selectedMed?.id === item.id && styles.selectedText]}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.dosageHint}>
+                    {item.dosages.slice(0, 2).join(', ')}...
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         </View>
-      )}
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 20, zIndex: 1000 },
+  container: { marginBottom: 20 },
   label: { fontSize: 16, fontWeight: '600', color: Colors.textSecondary, marginBottom: 8 },
   inputWrapper: { 
     flexDirection: 'row', 
@@ -90,26 +95,30 @@ const styles = StyleSheet.create({
     borderColor: Colors.border
   },
   input: { flex: 1, fontSize: 16, color: Colors.textPrimary },
-  dropdown: { 
-    position: 'absolute', 
-    top: 60, 
-    left: 0, 
-    right: 0, 
-    backgroundColor: Colors.card, 
-    borderRadius: 12, 
-    maxHeight: 200, 
-    shadowColor: '#000', 
-    shadowOpacity: 0.15, 
-    shadowRadius: 10, 
-    shadowOffset: { width: 0, height: 4 }, 
-    elevation: 5,
-    zIndex: 1001
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.5)', 
+    justifyContent: 'flex-end' 
   },
+  modalContainer: { 
+    backgroundColor: Colors.card, 
+    borderTopLeftRadius: 20, 
+    borderTopRightRadius: 20, 
+    maxHeight: '70%' 
+  },
+  modalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    padding: 20, 
+    borderBottomWidth: 1, 
+    borderBottomColor: Colors.border 
+  },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: Colors.textPrimary },
+  modalList: { maxHeight: 400 },
   option: { padding: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
   selectedOption: { backgroundColor: Colors.surface },
   optionText: { fontSize: 16, color: Colors.textPrimary, fontWeight: '500' },
   selectedText: { color: Colors.primaryDark },
   dosageHint: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  closeBtn: { padding: 12, alignItems: 'center', backgroundColor: Colors.surface },
-  closeBtnText: { color: Colors.primaryDark, fontWeight: '600' },
 });

@@ -59,6 +59,7 @@ export default function TimePicker({ label, value, onTimeChange }) {
                   data={hours}
                   keyExtractor={(item) => item.toString()}
                   showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled={true}
                   renderItem={({ item: h }) => (
                     <TouchableOpacity 
                       style={[styles.wheelOption, selectedHour === h && styles.selectedWheelOption]}
@@ -79,6 +80,7 @@ export default function TimePicker({ label, value, onTimeChange }) {
                   data={minutes}
                   keyExtractor={(item) => item.toString()}
                   showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled={true}
                   renderItem={({ item: m }) => (
                     <TouchableOpacity 
                       style={[styles.wheelOption, selectedMinute === m && styles.selectedWheelOption]}

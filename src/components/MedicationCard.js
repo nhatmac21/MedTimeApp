@@ -14,6 +14,7 @@ export default function MedicationCard({
   takenInfo, // string like 'Đã uống lúc 8:00'
   onTake,
   onSkip,
+  onDelete,
 }) {
   const isTaken = status === 'taken';
   const isSkipped = status === 'skipped';
@@ -25,14 +26,25 @@ export default function MedicationCard({
         <Text style={styles.sub}>{dosage}, uống {quantity} viên</Text>
         {!!takenInfo && <Text style={styles.note}>{takenInfo}</Text>}
       </View>
-      <TouchableOpacity
-        accessibilityRole="button"
-        style={[styles.action, { backgroundColor: actionBg }, (isTaken || isSkipped) && styles.actionDisabled]}
-        onPress={() => (isTaken ? onSkip?.() : onTake?.())}
-        disabled={isTaken || isSkipped}
-      >
-        {isTaken ? <Check /> : isSkipped ? <Cross /> : <Check />}
-      </TouchableOpacity>
+      <View style={styles.actionGroup}>
+        {onDelete && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={styles.deleteBtn}
+            onPress={onDelete}
+          >
+            <Ionicons name="close" size={32} color={Colors.white} />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={[styles.action, { backgroundColor: actionBg }, (isTaken || isSkipped) && styles.actionDisabled]}
+          onPress={() => (isTaken ? onSkip?.() : onTake?.())}
+          disabled={isTaken || isSkipped}
+        >
+          {isTaken ? <Check /> : isSkipped ? <Cross /> : <Check />}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -54,9 +66,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '800', color: Colors.textSecondary },
   sub: { marginTop: 6, color: Colors.textMuted },
   note: { marginTop: 6, color: Colors.textSecondary, fontWeight: '500' },
+  actionGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   action: {
     width: 72, height: 72, borderRadius: 36,
     alignItems: 'center', justifyContent: 'center',
   },
   actionDisabled: { opacity: 1 },
+  deleteBtn: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: Colors.danger,
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

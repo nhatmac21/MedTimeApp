@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import Dayjs from 'dayjs';
 import { Colors } from '../theme/colors';
 import DayCarousel from '../components/DayCarousel';
@@ -8,6 +8,7 @@ import MedicationCard from '../components/MedicationCard';
 import useClock from '../hooks/useClock';
 import { fetchMedicationsForDate, markDose } from '../services/medicationsApi';
 import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
+import { deleteMedicationByNameAndTime } from '../services/storage';
 
 export default function HomeScreen() {
   const now = useClock(1000);
@@ -53,6 +54,30 @@ export default function HomeScreen() {
     return Array.from(m.entries()).sort(([a],[b]) => a.localeCompare(b));
   }, [data]);
 
+  const handleDeleteMedication = async (medName, time) => {
+    Alert.alert(
+      'Xóa thuốc',
+      `Bạn có chắc muốn xóa "${medName}" lúc ${time}?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa', 
+          style: 'destructive',
+          onPress: async () => {
+            const result = await deleteMedicationByNameAndTime(medName, time);
+            if (result.success) {
+              // Reload data
+              const newData = await fetchMedicationsForDate(date.format('YYYY-MM-DD'));
+              setData(newData);
+            } else {
+              Alert.alert('Lỗi', 'Không thể xóa thuốc');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <DayCarousel date={date} onSelect={setDate} />
@@ -82,6 +107,7 @@ export default function HomeScreen() {
                   await markDose({ medId: med.id, time, status: 'skipped' });
                   setData((prev) => prev.map((mm) => mm.id === med.id ? { ...mm, times: mm.times.map((tt) => tt.time === time ? { ...tt, status: 'skipped' } : tt) } : mm));
                 }}
+                onDelete={() => handleDeleteMedication(med.name, time)}
               />)
             )}
           </View>
