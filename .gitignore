@@ -8,6 +8,9 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+.expo-shared/
+.expo-dev-cache/
+build/
 
 # Native
 .kotlin/
@@ -29,6 +32,13 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+
+# VSCode
+.vscode/
+
+# Misc logs
+*.log
+*.pid
 
 # local env files
 .env*.local
