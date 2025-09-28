@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
 import EditorScreen from '../screens/EditorScreen';
 import SearchScreen from '../screens/SearchScreen';
-import CommunityScreen from '../screens/CommunityScreen';
+import CaregiverScreen from '../screens/CaregiverScreen';
 import { Colors } from '../theme/colors';
 import { requestPermissions } from '../services/notifications';
 
@@ -32,7 +32,7 @@ export default function RootNavigator() {
               'Trang chủ': focused ? 'home' : 'home-outline',
               'Thêm': focused ? 'create' : 'create-outline',
               'Tìm': focused ? 'search' : 'search-outline',
-              'Khác': focused ? 'people' : 'people-outline',
+              'Giám hộ': focused ? 'people' : 'people-outline',
             };
             const name = map[route.name] ?? 'ellipse';
             return <Ionicons name={name} color={color} size={22} />;
@@ -42,7 +42,7 @@ export default function RootNavigator() {
         <Tab.Screen name="Trang chủ" component={HomeScreen} />
         <Tab.Screen name="Thêm" component={EditorScreen} />
         <Tab.Screen name="Tìm" component={SearchScreen} />
-        <Tab.Screen name="Khác" component={CommunityScreen} />
+        <Tab.Screen name="Giám hộ" component={CaregiverScreen} />
       </Tab.Navigator>
     </NavigationContainer>
   );

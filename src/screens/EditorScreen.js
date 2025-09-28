@@ -44,20 +44,20 @@ export default function EditorScreen({ navigation }) {
 
   const validateForm = () => {
     if (!selectedMed) {
-      Alert.alert('Lỗi', 'Vui lòng chọn thuốc');
+      Alert.alert('Thông tin chưa đầy đủ', 'Vui lòng chọn loại thuốc từ danh sách');
       return false;
     }
     if (!dosage.trim()) {
-      Alert.alert('Lỗi', 'Vui lòng nhập liều lượng');
+      Alert.alert('Thông tin chưa đầy đủ', 'Vui lòng nhập liều lượng thuốc (ví dụ: 500mg)');
       return false;
     }
     if (!quantity.trim() || isNaN(parseInt(quantity)) || parseInt(quantity) < 1) {
-      Alert.alert('Lỗi', 'Vui lòng nhập số lượng viên hợp lệ');
+      Alert.alert('Thông tin chưa đầy đủ', 'Vui lòng nhập số viên hợp lệ (ít nhất 1 viên)');
       return false;
     }
     const validTimes = times.filter(t => t.trim());
     if (validTimes.length === 0) {
-      Alert.alert('Lỗi', 'Vui lòng đặt ít nhất một mốc giờ');
+      Alert.alert('Thông tin chưa đầy đủ', 'Vui lòng chọn ít nhất một mốc giờ nhắc nhở');
       return false;
     }
     return true;
@@ -97,15 +97,15 @@ export default function EditorScreen({ navigation }) {
         }
 
         Alert.alert(
-          'Thành công', 
-          'Đã thêm thuốc và đặt lịch nhắc nhở!',
+          '✅ Thành công!', 
+          `Đã thêm "${selectedMed.name}" với ${validTimes.length} mốc giờ nhắc nhở!`,
           [{ text: 'OK', onPress: () => resetForm() }]
         );
       } else {
         throw new Error(result.error || 'Không thể lưu thuốc');
       }
     } catch (error) {
-      Alert.alert('Lỗi', error.message || 'Có lỗi xảy ra khi lưu thuốc');
+      Alert.alert('⚠️ Có lỗi xảy ra', error.message || 'Không thể lưu thuốc. Vui lòng thử lại!');
     } finally {
       setLoading(false);
     }
