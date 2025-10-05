@@ -6,12 +6,36 @@ import {
   StatusBar,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
+import { logoutUser } from '../services/auth';
 
-export default function CaregiverScreen() {
+export default function CaregiverScreen({ onLogout }) {
+  const handleLogout = async () => {
+    Alert.alert(
+      'Đăng xuất',
+      'Bạn có chắc chắn muốn đăng xuất?',
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel'
+        },
+        {
+          text: 'Đăng xuất',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await logoutUser();
+            if (success && onLogout) {
+              onLogout();
+            }
+          }
+        }
+      ]
+    );
+  };
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -23,8 +47,8 @@ export default function CaregiverScreen() {
       >
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Quan sát từ xa</Text>
-          <TouchableOpacity style={styles.settingsButton}>
-            <Ionicons name="settings-outline" size={24} color={Colors.white} />
+          <TouchableOpacity style={styles.settingsButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={24} color={Colors.white} />
           </TouchableOpacity>
         </View>
       </LinearGradient>

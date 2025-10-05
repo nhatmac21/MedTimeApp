@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
@@ -11,15 +10,9 @@ import { requestPermissions } from '../services/notifications';
 
 const Tab = createBottomTabNavigator();
 
-const navTheme = {
-  ...DefaultTheme,
-  colors: { ...DefaultTheme.colors, background: Colors.surface },
-};
-
-export default function RootNavigator() {
+export default function RootNavigator({ onLogout }) {
   useEffect(() => { requestPermissions(); }, []);
   return (
-    <NavigationContainer theme={navTheme}>
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
@@ -42,8 +35,10 @@ export default function RootNavigator() {
         <Tab.Screen name="Trang chủ" component={HomeScreen} />
         <Tab.Screen name="Thêm" component={EditorScreen} />
         <Tab.Screen name="Tìm" component={SearchScreen} />
-        <Tab.Screen name="Giám hộ" component={CaregiverScreen} />
+        <Tab.Screen 
+          name="Giám hộ" 
+          children={() => <CaregiverScreen onLogout={onLogout} />} 
+        />
       </Tab.Navigator>
-    </NavigationContainer>
   );
 }
