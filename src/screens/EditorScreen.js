@@ -136,7 +136,10 @@ export default function EditorScreen({ navigation }) {
             selectedMed={selectedMed} 
             onSelect={(med) => {
               setSelectedMed(med);
-              if (med.dosages.length > 0) {
+              // Tự động điền liều lượng từ backend response
+              if (med.strength) {
+                setDosage(med.strength);
+              } else if (med.dosages && med.dosages.length > 0) {
                 setDosage(med.dosages[0]);
               }
             }} 
@@ -151,7 +154,19 @@ export default function EditorScreen({ navigation }) {
                 onChangeText={setDosage}
                 placeholder="Ví dụ: 500mg"
               />
-              {selectedMed && selectedMed.dosages.length > 0 && (
+              {selectedMed && (
+                <View style={styles.medicineDetails}>
+                  <Text style={styles.medicineDetailText}>
+                    Loại: {selectedMed.type} • Danh mục: {selectedMed.category}
+                  </Text>
+                  {selectedMed.notes && (
+                    <Text style={styles.medicineNotes} numberOfLines={2}>
+                      Ghi chú: {selectedMed.notes}
+                    </Text>
+                  )}
+                </View>
+              )}
+              {selectedMed && selectedMed.dosages && selectedMed.dosages.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dosageOptions}>
                   {selectedMed.dosages.map((d, i) => (
                     <TouchableOpacity 
@@ -262,6 +277,22 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  medicineDetails: {
+    backgroundColor: Colors.surface,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  medicineDetailText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginBottom: 4,
+  },
+  medicineNotes: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
   },
   dosageOptions: { flexDirection: 'row' },
   dosageChip: {

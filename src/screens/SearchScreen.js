@@ -12,28 +12,22 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { getAllMedications } from '../services/storage';
-
-// Mock data for popular medications
-const popularMedications = [
-  { id: '1', name: 'Paracetamol 500mg', category: 'Giảm đau, hạ sốt' },
-  { id: '2', name: 'Amoxicillin 250mg', category: 'Kháng sinh' },
-  { id: '3', name: 'Vitamin C 1000mg', category: 'Vitamin & khoáng chất' },
-  { id: '4', name: 'Aspirin 100mg', category: 'Tim mạch' },
-  { id: '5', name: 'Omeprazole 20mg', category: 'Dạ dày' },
-  { id: '6', name: 'Metformin 500mg', category: 'Tiểu đường' },
-  { id: '7', name: 'Losartan 50mg', category: 'Huyết áp' },
-  { id: '8', name: 'Atorvastatin 20mg', category: 'Cholesterol' },
-];
+import { getAllMedications, saveMedication } from '../services/storage';
+import { fetchMedicinesFromBackend, searchMedicinesFromBackend } from '../services/medicationsApi';
 
 export default function SearchScreen() {
   const [searchText, setSearchText] = useState('');
-  const [filteredMedications, setFilteredMedications] = useState(popularMedications);
+  const [filteredMedications, setFilteredMedications] = useState([]);
   const [recentSearches, setRecentSearches] = useState([]);
   const [userMedications, setUserMedications] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [backendMedicines, setBackendMedicines] = useState([]);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [selectedMedication, setSelectedMedication] = useState(null);
 
   useEffect(() => {
     loadUserMedications();
+    loadPopularMedicines();
   }, []);
 
   const loadUserMedications = async () => {
@@ -45,31 +39,77 @@ export default function SearchScreen() {
     }
   };
 
-  const handleSearch = (text) => {
+  const loadPopularMedicines = async () => {
+    try {
+      setLoading(true);
+      const result = await fetchMedicinesFromBackend(1, 20);
+      if (result.success) {
+        setBackendMedicines(result.medicines);
+        setFilteredMedications(result.medicines);
+      } else {
+        console.log('Error loading medicines from backend:', result.error);
+        setFilteredMedications([]);
+      }
+    } catch (error) {
+      console.log('Error loading popular medicines:', error);
+      setFilteredMedications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async (text) => {
     setSearchText(text);
     
     if (text.trim() === '') {
-      setFilteredMedications(popularMedications);
+      setFilteredMedications(backendMedicines);
       return;
     }
 
-    // Combine user medications and popular medications for search
-    const allMedications = [
-      ...userMedications.map(med => ({
-        id: med.id,
-        name: med.name,
-        category: 'Thuốc của bạn',
-        isUserMed: true
-      })),
-      ...popularMedications
-    ];
+    setLoading(true);
+    try {
+      // Search from backend API
+      const result = await searchMedicinesFromBackend(text.trim());
+      if (result.success) {
+        // Combine backend results with user medications
+        const userMedsFiltered = userMedications
+          .filter(med => med.name.toLowerCase().includes(text.toLowerCase()))
+          .map(med => ({
+            id: med.id,
+            name: med.name,
+            category: 'Thuốc của bạn',
+            isUserMed: true
+          }));
 
-    const filtered = allMedications.filter(medication =>
-      medication.name.toLowerCase().includes(text.toLowerCase()) ||
-      medication.category.toLowerCase().includes(text.toLowerCase())
-    );
-    
-    setFilteredMedications(filtered);
+        const allResults = [...userMedsFiltered, ...result.medicines];
+        setFilteredMedications(allResults);
+      } else {
+        // Fallback to local search
+        const userMedsFiltered = userMedications
+          .filter(med => med.name.toLowerCase().includes(text.toLowerCase()))
+          .map(med => ({
+            id: med.id,
+            name: med.name,
+            category: 'Thuốc của bạn',
+            isUserMed: true
+          }));
+        setFilteredMedications(userMedsFiltered);
+      }
+    } catch (error) {
+      console.log('Search error:', error);
+      // Fallback to local search
+      const userMedsFiltered = userMedications
+        .filter(med => med.name.toLowerCase().includes(text.toLowerCase()))
+        .map(med => ({
+          id: med.id,
+          name: med.name,
+          category: 'Thuốc của bạn',
+          isUserMed: true
+        }));
+      setFilteredMedications(userMedsFiltered);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const addToRecentSearches = (searchTerm) => {
@@ -81,7 +121,7 @@ export default function SearchScreen() {
 
   const clearSearch = () => {
     setSearchText('');
-    setFilteredMedications(popularMedications);
+    setFilteredMedications(backendMedicines);
   };
 
   const selectMedication = (medication) => {
@@ -96,13 +136,81 @@ export default function SearchScreen() {
         },
         {
           text: 'Thêm vào nhắc nhở',
-          onPress: () => {
-            // Navigate to editor with pre-filled medication name
-            Alert.alert('Thông báo', 'Chức năng này sẽ được phát triển trong phiên bản sau');
-          }
+          onPress: () => addMedicationToReminder(medication)
         }
       ]
     );
+  };
+
+  const checkPremiumLimit = async () => {
+    const medications = await getAllMedications();
+    return medications.length >= 3;
+  };
+
+  const addMedicationToReminder = async (medication) => {
+    try {
+      // Check if user has reached the 3-medication limit
+      const reachedLimit = await checkPremiumLimit();
+      
+      if (reachedLimit) {
+        setSelectedMedication(medication);
+        setShowPremiumModal(true);
+        return;
+      }
+
+      // Check if medication already exists
+      const existingMedications = await getAllMedications();
+      const exists = existingMedications.some(med => 
+        med.name.toLowerCase() === medication.name.toLowerCase()
+      );
+
+      if (exists) {
+        Alert.alert(
+          'Thông báo',
+          'Thuốc này đã có trong danh sách nhắc nhở của bạn.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Create new medication object
+      const newMedication = {
+        id: Date.now().toString(),
+        name: medication.name,
+        dosage: medication.strength || '1 viên',
+        time: '08:00',
+        days: ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'],
+        createdAt: new Date().toISOString(),
+      };
+
+      await saveMedication(newMedication);
+      
+      Alert.alert(
+        'Thành công!',
+        `Đã thêm "${medication.name}" vào danh sách nhắc nhở.\n\nBạn có thể chỉnh sửa liều lượng và thời gian trong tab "Thêm".`,
+        [{ text: 'OK' }]
+      );
+
+      // Reload user medications
+      loadUserMedications();
+      
+    } catch (error) {
+      Alert.alert('Lỗi', 'Không thể thêm thuốc vào nhắc nhở. Vui lòng thử lại.');
+    }
+  };
+
+  const handlePremiumUpgrade = () => {
+    setShowPremiumModal(false);
+    Alert.alert(
+      'Premium',
+      'Chức năng nâng cấp Premium sẽ được phát triển trong phiên bản tiếp theo.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handlePremiumCancel = () => {
+    setShowPremiumModal(false);
+    setSelectedMedication(null);
   };
 
   const renderMedicationItem = ({ item }) => (
@@ -189,7 +297,7 @@ export default function SearchScreen() {
         {/* Results */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {searchText ? `Kết quả tìm kiếm (${filteredMedications.length})` : 'Thuốc phổ biến'}
+            {searchText ? `Kết quả tìm kiếm (${filteredMedications.length})` : 'Danh sách thuốc từ hệ thống'}
           </Text>
           <FlatList
             data={filteredMedications}

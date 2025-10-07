@@ -1,34 +1,85 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-
-// Danh sách thuốc phổ biến Việt Nam
-const COMMON_MEDICATIONS = [
-  { id: 'paracetamol', name: 'Paracetamol', dosages: ['500mg', '650mg', '1000mg'] },
-  { id: 'ibuprofen', name: 'Ibuprofen', dosages: ['200mg', '400mg', '600mg'] },
-  { id: 'aspirin', name: 'Aspirin', dosages: ['100mg', '300mg', '500mg'] },
-  { id: 'amlodipine', name: 'Amlodipine', dosages: ['5mg', '10mg'] },
-  { id: 'metformin', name: 'Metformin', dosages: ['500mg', '850mg', '1000mg'] },
-  { id: 'omeprazole', name: 'Omeprazole', dosages: ['20mg', '40mg'] },
-  { id: 'simvastatin', name: 'Simvastatin', dosages: ['10mg', '20mg', '40mg'] },
-  { id: 'lisinopril', name: 'Lisinopril', dosages: ['5mg', '10mg', '20mg'] },
-  { id: 'omega3', name: 'Omega-3', dosages: ['100mg', '500mg', '1000mg'] },
-  { id: 'vitamin-d', name: 'Vitamin D3', dosages: ['1000IU', '2000IU', '5000IU'] },
-  { id: 'calcium', name: 'Canxi', dosages: ['500mg', '600mg', '1000mg'] },
-  { id: 'multivitamin', name: 'Multivitamin', dosages: ['1 viên', '2 viên'] },
-];
+import { fetchMedicinesFromBackend, searchMedicinesFromBackend } from '../services/medicationsApi';
 
 export default function MedicationPicker({ onSelect, selectedMed }) {
   const [search, setSearch] = useState('');
   const [showList, setShowList] = useState(false);
+  const [medicines, setMedicines] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
 
-  const filtered = COMMON_MEDICATIONS.filter(med => 
-    med.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Load initial medicines data
+  useEffect(() => {
+    loadMedicines();
+  }, []);
+
+  // Search when user types
+  useEffect(() => {
+    if (search.trim().length >= 2) {
+      searchMedicines(search.trim());
+    } else {
+      setSearchResults(medicines.slice(0, 20)); // Show first 20 items
+    }
+  }, [search, medicines]);
+
+  const loadMedicines = async () => {
+    setLoading(true);
+    try {
+      const result = await fetchMedicinesFromBackend(1, 50);
+      if (result.success) {
+        setMedicines(result.medicines);
+        setSearchResults(result.medicines.slice(0, 20));
+      } else {
+        console.error('Failed to load medicines:', result.error);
+      }
+    } catch (error) {
+      console.error('Error loading medicines:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchMedicines = async (searchTerm) => {
+    setLoading(true);
+    try {
+      const result = await searchMedicinesFromBackend(searchTerm, 1, 20);
+      if (result.success) {
+        setSearchResults(result.medicines);
+      } else {
+        console.error('Search failed:', result.error);
+        // Fallback to local filter
+        setSearchResults(medicines.filter(med => 
+          med.name.toLowerCase().includes(searchTerm.toLowerCase())
+        ));
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      // Fallback to local filter
+      setSearchResults(medicines.filter(med => 
+        med.name.toLowerCase().includes(searchTerm.toLowerCase())
+      ));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSelect = (med) => {
-    onSelect(med);
+    // Transform backend data to match EditorScreen expectations
+    const transformedMed = {
+      id: med.id,
+      name: med.name,
+      strength: med.strength,
+      type: med.type,
+      category: med.category,
+      dosages: [med.strength], // Use strength as default dosage
+      imageUrl: med.imageUrl,
+      notes: med.notes
+    };
+    
+    onSelect(transformedMed);
     setSearch(med.name);
     setShowList(false);
   };
@@ -56,24 +107,43 @@ export default function MedicationPicker({ onSelect, selectedMed }) {
                 <Ionicons name="close" size={24} color={Colors.textMuted} />
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={filtered}
-              keyExtractor={item => item.id}
-              style={styles.modalList}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={[styles.option, selectedMed?.id === item.id && styles.selectedOption]} 
-                  onPress={() => handleSelect(item)}
-                >
-                  <Text style={[styles.optionText, selectedMed?.id === item.id && styles.selectedText]}>
-                    {item.name}
-                  </Text>
-                  <Text style={styles.dosageHint}>
-                    {item.dosages.slice(0, 2).join(', ')}...
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={Colors.primaryDark} />
+                <Text style={styles.loadingText}>Đang tải danh sách thuốc...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={searchResults}
+                keyExtractor={item => item.id}
+                style={styles.modalList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity 
+                    style={[styles.option, selectedMed?.id === item.id && styles.selectedOption]} 
+                    onPress={() => handleSelect(item)}
+                  >
+                    <View style={styles.medicineInfo}>
+                      <Text style={[styles.optionText, selectedMed?.id === item.id && styles.selectedText]}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.strengthText}>
+                        {item.strength} • {item.type}
+                      </Text>
+                      {item.notes && (
+                        <Text style={styles.notesText} numberOfLines={1}>
+                          {item.notes}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={() => (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>Không tìm thấy thuốc nào</Text>
+                  </View>
+                )}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -118,7 +188,13 @@ const styles = StyleSheet.create({
   modalList: { maxHeight: 400 },
   option: { padding: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
   selectedOption: { backgroundColor: Colors.surface },
+  medicineInfo: { flex: 1 },
   optionText: { fontSize: 16, color: Colors.textPrimary, fontWeight: '500' },
   selectedText: { color: Colors.primaryDark },
-  dosageHint: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  strengthText: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  notesText: { fontSize: 11, color: Colors.textMuted, marginTop: 1, fontStyle: 'italic' },
+  loadingContainer: { padding: 40, alignItems: 'center' },
+  loadingText: { marginTop: 12, color: Colors.textMuted },
+  emptyContainer: { padding: 40, alignItems: 'center' },
+  emptyText: { color: Colors.textMuted },
 });
