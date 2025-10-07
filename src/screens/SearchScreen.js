@@ -8,12 +8,62 @@ import {
   TouchableOpacity,
   FlatList,
   Alert,
+  Modal,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { getAllMedications, saveMedication } from '../services/storage';
-import { fetchMedicinesFromBackend, searchMedicinesFromBackend } from '../services/medicationsApi';
+import { fetchMedicinesFromBackend, searchMedicinesFromBackend, addMedicineToBackend } from '../services/medicationsApi';
+
+// Constants for dropdowns
+const MEDICINE_TYPES = [
+  { label: 'Viên nén', value: 'TABLET' },
+  { label: 'Viên nang', value: 'CAPSULE' },
+  { label: 'Siro uống', value: 'SYRUP' },
+  { label: 'Dung dịch uống/tiêm', value: 'SOLUTION' },
+  { label: 'Hỗn dịch (huyền dịch)', value: 'SUSPENSION' },
+  { label: 'Bột hòa tan', value: 'POWDER' },
+  { label: 'Gói bột (sachet)', value: 'SACHET' },
+  { label: 'Thuốc tiêm (chung)', value: 'INJECTION' },
+  { label: 'Ống tiêm (ampoule)', value: 'AMPULE' },
+  { label: 'Lọ thuốc tiêm (vial)', value: 'VIAL' },
+  { label: 'Thuốc nhỏ mắt', value: 'EYE_DROPS' },
+  { label: 'Thuốc nhỏ tai', value: 'EAR_DROPS' },
+  { label: 'Thuốc xịt mũi', value: 'NASAL_SPRAY' },
+  { label: 'Thuốc hít', value: 'INHALER' },
+  { label: 'Thuốc mỡ', value: 'OINTMENT' },
+  { label: 'Kem bôi', value: 'CREAM' },
+  { label: 'Gel bôi', value: 'GEL' },
+  { label: 'Miếng dán', value: 'PATCH' },
+  { label: 'Thuốc đặt (âm đạo/hậu môn)', value: 'SUPPOSITORY' },
+  { label: 'Khác', value: 'OTHER' }
+];
+
+const STRENGTH_UNITS = [
+  { label: 'mg', value: 'MG' },
+  { label: 'g', value: 'G' },
+  { label: 'mcg (µg)', value: 'MCG' },
+  { label: 'IU (đơn vị quốc tế)', value: 'IU' },
+  { label: 'Unit (đơn vị chung)', value: 'UNIT' },
+  { label: 'ml', value: 'ML' },
+  { label: 'L', value: 'L' },
+  { label: 'giọt', value: 'DROPS' },
+  { label: 'viên', value: 'TABLET' },
+  { label: 'viên nang', value: 'CAPSULE' },
+  { label: 'miếng dán', value: 'PATCH' },
+  { label: 'gói', value: 'SACHET' },
+  { label: 'ống', value: 'AMPULE' },
+  { label: 'lọ', value: 'VIAL' },
+  { label: 'mg/ml', value: 'MG_PER_ML' },
+  { label: 'mg/5ml', value: 'MG_PER_5ML' },
+  { label: 'IU/ml', value: 'IU_PER_ML' },
+  { label: '%', value: 'PERCENT' },
+  { label: 'Khác', value: 'OTHER' }
+];
 
 export default function SearchScreen() {
   const [searchText, setSearchText] = useState('');
@@ -24,6 +74,18 @@ export default function SearchScreen() {
   const [backendMedicines, setBackendMedicines] = useState([]);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [selectedMedication, setSelectedMedication] = useState(null);
+  const [showAddMedicineModal, setShowAddMedicineModal] = useState(false);
+  const [newMedicine, setNewMedicine] = useState({
+    name: '',
+    strengthvalue: '',
+    type: 'TABLET',
+    strengthUnit: 'MG',
+    imageurl: '',
+    notes: ''
+  });
+  const [addingMedicine, setAddingMedicine] = useState(false);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
 
   useEffect(() => {
     loadUserMedications();
@@ -55,6 +117,51 @@ export default function SearchScreen() {
       setFilteredMedications([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resetNewMedicineForm = () => {
+    setNewMedicine({
+      name: '',
+      strengthvalue: '',
+      type: 'TABLET',
+      strengthUnit: 'MG',
+      imageurl: '',
+      notes: ''
+    });
+  };
+
+  const handleAddMedicine = async () => {
+    if (!newMedicine.name.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập tên thuốc');
+      return;
+    }
+    if (!newMedicine.strengthvalue.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập hàm lượng thuốc');
+      return;
+    }
+
+    setAddingMedicine(true);
+    try {
+      const medicineData = {
+        ...newMedicine,
+        strengthvalue: parseFloat(newMedicine.strengthvalue)
+      };
+
+      const result = await addMedicineToBackend(medicineData);
+      if (result.success) {
+        Alert.alert('Thành công', 'Đã thêm thuốc mới thành công!');
+        setShowAddMedicineModal(false);
+        resetNewMedicineForm();
+        // Reload medicines list
+        loadPopularMedicines();
+      } else {
+        Alert.alert('Lỗi', result.error || 'Không thể thêm thuốc mới');
+      }
+    } catch (error) {
+      Alert.alert('Lỗi', 'Đã xảy ra lỗi khi thêm thuốc mới');
+    } finally {
+      setAddingMedicine(false);
     }
   };
 
@@ -254,6 +361,12 @@ export default function SearchScreen() {
       >
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Tìm kiếm thuốc</Text>
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => setShowAddMedicineModal(true)}
+          >
+            <Ionicons name="add-circle-outline" size={28} color={Colors.white} />
+          </TouchableOpacity>
         </View>
         
         {/* Search Bar */}
@@ -314,9 +427,208 @@ export default function SearchScreen() {
           />
         </View>
       </View>
-    </View>
-  );
-}
+        {/* Add Medicine Modal */}
+        <Modal
+          visible={showAddMedicineModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+        >
+          <KeyboardAvoidingView 
+            style={styles.modalContainer}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={styles.modalHeader}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowAddMedicineModal(false);
+                  resetNewMedicineForm();
+                }}
+              >
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Thêm thuốc mới</Text>
+              <TouchableOpacity 
+                style={[styles.saveButton, addingMedicine && styles.saveButtonDisabled]}
+                onPress={handleAddMedicine}
+                disabled={addingMedicine}
+              >
+                <Text style={styles.saveButtonText}>
+                  {addingMedicine ? 'Đang lưu...' : 'Lưu'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.modalContent} 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              onScrollBeginDrag={() => {
+                setShowTypeDropdown(false);
+                setShowUnitDropdown(false);
+              }}
+            >
+              {/* Tên thuốc */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Tên thuốc *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newMedicine.name}
+                  onChangeText={(text) => setNewMedicine(prev => ({ ...prev, name: text }))}
+                  placeholder="Nhập tên thuốc"
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+
+              {/* Hàm lượng */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Hàm lượng *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newMedicine.strengthvalue}
+                  onChangeText={(text) => setNewMedicine(prev => ({ ...prev, strengthvalue: text }))}
+                  placeholder="Ví dụ: 500"
+                  keyboardType="numeric"
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+
+              {/* Đơn vị hàm lượng */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Đơn vị hàm lượng</Text>
+                <View style={styles.dropdownContainer}>
+                  <TouchableOpacity 
+                    style={styles.dropdown}
+                    onPress={() => setShowUnitDropdown(!showUnitDropdown)}
+                  >
+                    <Text style={styles.dropdownText}>
+                      {STRENGTH_UNITS.find(unit => unit.value === newMedicine.strengthUnit)?.label || 'mg'}
+                    </Text>
+                    <Ionicons 
+                      name={showUnitDropdown ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color={Colors.textMuted} 
+                    />
+                  </TouchableOpacity>
+                  {showUnitDropdown && (
+                    <View style={styles.dropdownList}>
+                      <ScrollView 
+                        style={styles.dropdownScrollView}
+                        nestedScrollEnabled={true}
+                        showsVerticalScrollIndicator={true}
+                      >
+                        {STRENGTH_UNITS.map(unit => (
+                          <TouchableOpacity
+                            key={unit.value}
+                            style={[
+                              styles.dropdownItem,
+                              newMedicine.strengthUnit === unit.value && styles.dropdownItemSelected
+                            ]}
+                            onPress={() => {
+                              setNewMedicine(prev => ({ ...prev, strengthUnit: unit.value }));
+                              setShowUnitDropdown(false);
+                            }}
+                          >
+                            <Text style={[
+                              styles.dropdownItemText,
+                              newMedicine.strengthUnit === unit.value && styles.dropdownItemTextSelected
+                            ]}>
+                              {unit.label}
+                            </Text>
+                            {newMedicine.strengthUnit === unit.value && (
+                              <Ionicons name="checkmark" size={20} color={Colors.primaryDark} />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Dạng bào chế */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Dạng bào chế</Text>
+                <View style={styles.dropdownContainer}>
+                  <TouchableOpacity 
+                    style={styles.dropdown}
+                    onPress={() => setShowTypeDropdown(!showTypeDropdown)}
+                  >
+                    <Text style={styles.dropdownText}>
+                      {MEDICINE_TYPES.find(type => type.value === newMedicine.type)?.label || 'Viên nén'}
+                    </Text>
+                    <Ionicons 
+                      name={showTypeDropdown ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color={Colors.textMuted} 
+                    />
+                  </TouchableOpacity>
+                  {showTypeDropdown && (
+                    <View style={styles.dropdownList}>
+                      <ScrollView 
+                        style={styles.dropdownScrollView}
+                        nestedScrollEnabled={true}
+                        showsVerticalScrollIndicator={true}
+                      >
+                        {MEDICINE_TYPES.map(type => (
+                          <TouchableOpacity
+                            key={type.value}
+                            style={[
+                              styles.dropdownItem,
+                              newMedicine.type === type.value && styles.dropdownItemSelected
+                            ]}
+                            onPress={() => {
+                              setNewMedicine(prev => ({ ...prev, type: type.value }));
+                              setShowTypeDropdown(false);
+                            }}
+                          >
+                            <Text style={[
+                              styles.dropdownItemText,
+                              newMedicine.type === type.value && styles.dropdownItemTextSelected
+                            ]}>
+                              {type.label}
+                            </Text>
+                            {newMedicine.type === type.value && (
+                              <Ionicons name="checkmark" size={20} color={Colors.primaryDark} />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* URL hình ảnh */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>URL hình ảnh</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newMedicine.imageurl}
+                  onChangeText={(text) => setNewMedicine(prev => ({ ...prev, imageurl: text }))}
+                  placeholder="https://example.com/image.jpg"
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+
+              {/* Ghi chú */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Ghi chú</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  value={newMedicine.notes}
+                  onChangeText={(text) => setNewMedicine(prev => ({ ...prev, notes: text }))}
+                  placeholder="Thông tin thêm về thuốc..."
+                  multiline
+                  numberOfLines={3}
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Modal>
+      </View>
+    );
+  }
 
 const styles = StyleSheet.create({
   container: {
@@ -331,8 +643,13 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 25,
   },
   headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+  },
+  addButton: {
+    padding: 4,
   },
   headerTitle: {
     fontSize: 24,
@@ -448,5 +765,123 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 5,
     textAlign: 'center',
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  saveButton: {
+    backgroundColor: Colors.primaryDark,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  dropdownContainer: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  dropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: Colors.textPrimary,
+  },
+  dropdownList: {
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    maxHeight: 200,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    overflow: 'hidden',
+  },
+  dropdownScrollView: {
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  dropdownItemSelected: {
+    backgroundColor: Colors.surface,
+  },
+  dropdownItemText: {
+    fontSize: 16,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  dropdownItemTextSelected: {
+    color: Colors.primaryDark,
+    fontWeight: '500',
   },
 });

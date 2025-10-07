@@ -172,6 +172,35 @@ export async function fetchMedicationsForDate(dateKey) {
   }));
 }
 
+// Add new medicine to backend
+export async function addMedicineToBackend(medicineData) {
+  try {
+    const result = await apiRequest('/medicine', {
+      method: 'POST',
+      body: JSON.stringify(medicineData),
+    });
+
+    if (result.success) {
+      return {
+        success: true,
+        medicine: {
+          id: result.data.medicineid.toString(),
+          name: result.data.name,
+          strength: `${result.data.strengthvalue}${result.data.strengthUnit}`,
+          type: result.data.type,
+          imageUrl: result.data.imageurl,
+          notes: result.data.notes,
+          category: getTypeCategory(result.data.type),
+        }
+      };
+    } else {
+      return { success: false, error: result.error };
+    }
+  } catch (error) {
+    return { success: false, error: 'Không thể thêm thuốc mới' };
+  }
+}
+
 export async function markDose({ medId, time, status, takenAt, note }) {
   // TODO: Implement API call to mark dose status
   await new Promise((r) => setTimeout(r, 150));
