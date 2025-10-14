@@ -10,5 +10,6 @@ export const Colors = {
   border: 'rgba(0,0,0,0.08)',
   success: '#2FA77A',
   danger: '#E86C6C',
+  accent: '#FFC107', // Vàng cho premium features
   white: '#FFFFFF',
 };

@@ -67,6 +67,10 @@ export default function MedicationPicker({ onSelect, selectedMed }) {
   };
 
   const handleSelect = (med) => {
+    console.log('=== MedicationPicker handleSelect ===');
+    console.log('Selected medicine:', med);
+    console.log('onSelect callback exists:', !!onSelect);
+    
     // Transform backend data to match EditorScreen expectations
     const transformedMed = {
       id: med.id,
@@ -79,7 +83,15 @@ export default function MedicationPicker({ onSelect, selectedMed }) {
       notes: med.notes
     };
     
-    onSelect(transformedMed);
+    console.log('Transformed medicine:', transformedMed);
+    
+    if (onSelect) {
+      onSelect(transformedMed);
+      console.log('onSelect called successfully');
+    } else {
+      console.error('onSelect callback is missing!');
+    }
+    
     setSearch(med.name);
     setShowList(false);
   };

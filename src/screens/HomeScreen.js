@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, Text } from 'react-native';
 import Dayjs from 'dayjs';
 import { Colors } from '../theme/colors';
 import DayCarousel from '../components/DayCarousel';
@@ -10,16 +10,55 @@ import { fetchMedicationsForDate, markDose } from '../services/medicationsApi';
 import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
 import { deleteMedicationByNameAndTime } from '../services/storage';
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation, route }) {
   const now = useClock(1000);
   const [date, setDate] = useState(Dayjs());
   const [data, setData] = useState([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadMedicationsForDate = async (selectedDate, showRefreshIndicator = false) => {
+    try {
+      if (showRefreshIndicator) {
+        setIsRefreshing(true);
+      }
+      const medications = await fetchMedicationsForDate(selectedDate.format('YYYY-MM-DD'));
+      setData(medications);
+      console.log(`Loaded ${medications.length} medications for ${selectedDate.format('YYYY-MM-DD')}`);
+    } catch (error) {
+      console.error('Error loading medications:', error);
+    } finally {
+      if (showRefreshIndicator) {
+        setIsRefreshing(false);
+      }
+    }
+  };
 
   useEffect(() => {
-    let mounted = true;
-    fetchMedicationsForDate(date.format('YYYY-MM-DD')).then((d) => mounted && setData(d));
-    return () => { mounted = false; };
+    loadMedicationsForDate(date);
   }, [date]);
+
+  // Listen for navigation params to reload data
+  useEffect(() => {
+    if (route.params?.shouldReload) {
+      console.log('HomeScreen: Reloading data due to shouldReload param');
+      loadMedicationsForDate(date, true); // Show refresh indicator
+      // Clear the param to prevent multiple reloads
+      navigation.setParams({ shouldReload: false });
+    }
+  }, [route.params?.shouldReload, date, navigation]);
+
+  // Also reload when screen comes into focus (but only if no shouldReload param)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      // Only reload on focus if not already reloading due to shouldReload
+      if (!route.params?.shouldReload) {
+        console.log('HomeScreen: Reloading data due to focus');
+        loadMedicationsForDate(date);
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, date, route.params?.shouldReload]);
 
   // Lên lịch thông báo cho các liều chưa uống
   useEffect(() => {
@@ -66,9 +105,8 @@ export default function HomeScreen() {
           onPress: async () => {
             const result = await deleteMedicationByNameAndTime(medName, time);
             if (result.success) {
-              // Reload data
-              const newData = await fetchMedicationsForDate(date.format('YYYY-MM-DD'));
-              setData(newData);
+              // Reload data with refresh indicator
+              await loadMedicationsForDate(date, true);
             } else {
               Alert.alert('Lỗi', 'Không thể xóa thuốc');
             }
@@ -81,6 +119,11 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <DayCarousel date={date} onSelect={setDate} />
+      {isRefreshing && (
+        <View style={styles.refreshIndicator}>
+          <Text style={styles.refreshText}>🔄 Đang cập nhật danh sách thuốc...</Text>
+        </View>
+      )}
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 30 }}>
         {grouped.map(([time, items]) => (
           <View key={time}>
@@ -120,4 +163,22 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   scroll: { flex: 1 },
+  refreshIndicator: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    alignSelf: 'center',
+    marginVertical: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  refreshText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '500',
+  },
 });
