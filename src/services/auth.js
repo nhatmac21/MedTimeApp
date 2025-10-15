@@ -118,6 +118,7 @@ export const loginUser = async (username, password) => {
           timezone: user.timezone,
           premiumStart: user.premiumstart,
           premiumEnd: user.premiumend,
+          uniquecode: user.uniquecode,
           loginTime: new Date().toISOString(),
         }));
         
@@ -221,5 +222,47 @@ export const isUserPremium = async () => {
   } catch (error) {
     console.log('Error checking premium status:', error);
     return false;
+  }
+};
+
+// Get user info from backend API
+export const getUserInfo = async () => {
+  try {
+    const result = await apiRequest('/user/me', {
+      method: 'GET',
+    });
+
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể lấy thông tin người dùng' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
+// Update user info to backend API
+export const updateUserInfo = async (userId, userData) => {
+  try {
+    const result = await apiRequest(`/user/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        fullname: userData.fullname,
+        email: userData.email,
+        phonenumber: userData.phonenumber,
+        dateofbirth: userData.dateofbirth,
+        gender: userData.gender,
+        timezone: userData.timezone || 'string'
+      }),
+    });
+
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể cập nhật thông tin người dùng' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
   }
 };
