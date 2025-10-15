@@ -8,32 +8,91 @@ import {
   TouchableOpacity,
   FlatList,
   Alert,
+  Modal,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { getAllMedications } from '../services/storage';
+import { getAllMedications, saveMedication } from '../services/storage';
+import { fetchMedicinesFromBackend, searchMedicinesFromBackend, addMedicineToBackend } from '../services/medicationsApi';
 
-// Mock data for popular medications
-const popularMedications = [
-  { id: '1', name: 'Paracetamol 500mg', category: 'Giảm đau, hạ sốt' },
-  { id: '2', name: 'Amoxicillin 250mg', category: 'Kháng sinh' },
-  { id: '3', name: 'Vitamin C 1000mg', category: 'Vitamin & khoáng chất' },
-  { id: '4', name: 'Aspirin 100mg', category: 'Tim mạch' },
-  { id: '5', name: 'Omeprazole 20mg', category: 'Dạ dày' },
-  { id: '6', name: 'Metformin 500mg', category: 'Tiểu đường' },
-  { id: '7', name: 'Losartan 50mg', category: 'Huyết áp' },
-  { id: '8', name: 'Atorvastatin 20mg', category: 'Cholesterol' },
+// Constants for dropdowns
+const MEDICINE_TYPES = [
+  { label: 'Viên nén', value: 'TABLET' },
+  { label: 'Viên nang', value: 'CAPSULE' },
+  { label: 'Siro uống', value: 'SYRUP' },
+  { label: 'Dung dịch uống/tiêm', value: 'SOLUTION' },
+  { label: 'Hỗn dịch (huyền dịch)', value: 'SUSPENSION' },
+  { label: 'Bột hòa tan', value: 'POWDER' },
+  { label: 'Gói bột (sachet)', value: 'SACHET' },
+  { label: 'Thuốc tiêm (chung)', value: 'INJECTION' },
+  { label: 'Ống tiêm (ampoule)', value: 'AMPULE' },
+  { label: 'Lọ thuốc tiêm (vial)', value: 'VIAL' },
+  { label: 'Thuốc nhỏ mắt', value: 'EYE_DROPS' },
+  { label: 'Thuốc nhỏ tai', value: 'EAR_DROPS' },
+  { label: 'Thuốc xịt mũi', value: 'NASAL_SPRAY' },
+  { label: 'Thuốc hít', value: 'INHALER' },
+  { label: 'Thuốc mỡ', value: 'OINTMENT' },
+  { label: 'Kem bôi', value: 'CREAM' },
+  { label: 'Gel bôi', value: 'GEL' },
+  { label: 'Miếng dán', value: 'PATCH' },
+  { label: 'Thuốc đặt (âm đạo/hậu môn)', value: 'SUPPOSITORY' },
+  { label: 'Khác', value: 'OTHER' }
+];
+
+const STRENGTH_UNITS = [
+  { label: 'mg', value: 'MG' },
+  { label: 'g', value: 'G' },
+  { label: 'mcg (µg)', value: 'MCG' },
+  { label: 'IU (đơn vị quốc tế)', value: 'IU' },
+  { label: 'Unit (đơn vị chung)', value: 'UNIT' },
+  { label: 'ml', value: 'ML' },
+  { label: 'L', value: 'L' },
+  { label: 'giọt', value: 'DROPS' },
+  { label: 'viên', value: 'TABLET' },
+  { label: 'viên nang', value: 'CAPSULE' },
+  { label: 'miếng dán', value: 'PATCH' },
+  { label: 'gói', value: 'SACHET' },
+  { label: 'ống', value: 'AMPULE' },
+  { label: 'lọ', value: 'VIAL' },
+  { label: 'mg/ml', value: 'MG_PER_ML' },
+  { label: 'mg/5ml', value: 'MG_PER_5ML' },
+  { label: 'IU/ml', value: 'IU_PER_ML' },
+  { label: '%', value: 'PERCENT' },
+  { label: 'Khác', value: 'OTHER' }
 ];
 
 export default function SearchScreen() {
   const [searchText, setSearchText] = useState('');
-  const [filteredMedications, setFilteredMedications] = useState(popularMedications);
+  const [filteredMedications, setFilteredMedications] = useState([]);
   const [recentSearches, setRecentSearches] = useState([]);
   const [userMedications, setUserMedications] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [backendMedicines, setBackendMedicines] = useState([]);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [selectedMedication, setSelectedMedication] = useState(null);
+  const [showAddMedicineModal, setShowAddMedicineModal] = useState(false);
+  const [newMedicine, setNewMedicine] = useState({
+    name: '',
+    strengthvalue: '',
+    type: 'TABLET',
+    strengthUnit: 'MG',
+    imageurl: '',
+    notes: ''
+  });
+  const [addingMedicine, setAddingMedicine] = useState(false);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
+  const [showMedicineDetail, setShowMedicineDetail] = useState(false);
+  const [selectedMedicineDetail, setSelectedMedicineDetail] = useState(null);
 
   useEffect(() => {
     loadUserMedications();
+    loadPopularMedicines();
   }, []);
 
   const loadUserMedications = async () => {
@@ -45,31 +104,122 @@ export default function SearchScreen() {
     }
   };
 
-  const handleSearch = (text) => {
-    setSearchText(text);
-    
-    if (text.trim() === '') {
-      setFilteredMedications(popularMedications);
+  const loadPopularMedicines = async () => {
+    try {
+      setLoading(true);
+      const result = await fetchMedicinesFromBackend(1, 20);
+      if (result.success) {
+        setBackendMedicines(result.medicines);
+        setFilteredMedications(result.medicines);
+      } else {
+        console.log('Error loading medicines from backend:', result.error);
+        setFilteredMedications([]);
+      }
+    } catch (error) {
+      console.log('Error loading popular medicines:', error);
+      setFilteredMedications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetNewMedicineForm = () => {
+    setNewMedicine({
+      name: '',
+      strengthvalue: '',
+      type: 'TABLET',
+      strengthUnit: 'MG',
+      imageurl: '',
+      notes: ''
+    });
+  };
+
+  const handleAddMedicine = async () => {
+    if (!newMedicine.name.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập tên thuốc');
+      return;
+    }
+    if (!newMedicine.strengthvalue.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập hàm lượng thuốc');
       return;
     }
 
-    // Combine user medications and popular medications for search
-    const allMedications = [
-      ...userMedications.map(med => ({
-        id: med.id,
-        name: med.name,
-        category: 'Thuốc của bạn',
-        isUserMed: true
-      })),
-      ...popularMedications
-    ];
+    setAddingMedicine(true);
+    try {
+      const medicineData = {
+        ...newMedicine,
+        strengthvalue: parseFloat(newMedicine.strengthvalue)
+      };
 
-    const filtered = allMedications.filter(medication =>
-      medication.name.toLowerCase().includes(text.toLowerCase()) ||
-      medication.category.toLowerCase().includes(text.toLowerCase())
-    );
+      const result = await addMedicineToBackend(medicineData);
+      if (result.success) {
+        Alert.alert('Thành công', 'Đã thêm thuốc mới thành công!');
+        setShowAddMedicineModal(false);
+        resetNewMedicineForm();
+        // Reload medicines list
+        loadPopularMedicines();
+      } else {
+        Alert.alert('Lỗi', result.error || 'Không thể thêm thuốc mới');
+      }
+    } catch (error) {
+      Alert.alert('Lỗi', 'Đã xảy ra lỗi khi thêm thuốc mới');
+    } finally {
+      setAddingMedicine(false);
+    }
+  };
+
+  const handleSearch = async (text) => {
+    setSearchText(text);
     
-    setFilteredMedications(filtered);
+    if (text.trim() === '') {
+      setFilteredMedications(backendMedicines);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Search from backend API
+      const result = await searchMedicinesFromBackend(text.trim());
+      if (result.success) {
+        // Combine backend results with user medications
+        const userMedsFiltered = userMedications
+          .filter(med => med.name.toLowerCase().includes(text.toLowerCase()))
+          .map(med => ({
+            id: med.id,
+            name: med.name,
+            category: 'Thuốc của bạn',
+            isUserMed: true
+          }));
+
+        const allResults = [...userMedsFiltered, ...result.medicines];
+        setFilteredMedications(allResults);
+      } else {
+        // Fallback to local search
+        const userMedsFiltered = userMedications
+          .filter(med => med.name.toLowerCase().includes(text.toLowerCase()))
+          .map(med => ({
+            id: med.id,
+            name: med.name,
+            category: 'Thuốc của bạn',
+            isUserMed: true
+          }));
+        setFilteredMedications(userMedsFiltered);
+      }
+    } catch (error) {
+      console.log('Search error:', error);
+      // Fallback to local search
+      const userMedsFiltered = userMedications
+        .filter(med => med.name.toLowerCase().includes(text.toLowerCase()))
+        .map(med => ({
+          id: med.id,
+          name: med.name,
+          category: 'Thuốc của bạn',
+          isUserMed: true
+        }));
+      setFilteredMedications(userMedsFiltered);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const addToRecentSearches = (searchTerm) => {
@@ -81,28 +231,135 @@ export default function SearchScreen() {
 
   const clearSearch = () => {
     setSearchText('');
-    setFilteredMedications(popularMedications);
+    setFilteredMedications(backendMedicines);
   };
 
   const selectMedication = (medication) => {
     addToRecentSearches(medication.name);
+    setSelectedMedicineDetail(medication);
+    setShowMedicineDetail(true);
+  };
+
+  const getTypeDisplayName = (type) => {
+    const typeMap = {
+      'TABLET': 'Viên nén',
+      'CAPSULE': 'Viên nang',
+      'SYRUP': 'Siro uống',
+      'SOLUTION': 'Dung dịch uống/tiêm',
+      'SUSPENSION': 'Hỗn dịch (huyền dịch)',
+      'POWDER': 'Bột hòa tan',
+      'SACHET': 'Gói bột (sachet)',
+      'INJECTION': 'Thuốc tiêm (chung)',
+      'AMPULE': 'Ống tiêm (ampoule)',
+      'VIAL': 'Lọ thuốc tiêm (vial)',
+      'EYE_DROPS': 'Thuốc nhỏ mắt',
+      'EAR_DROPS': 'Thuốc nhỏ tai',
+      'NASAL_SPRAY': 'Thuốc xịt mũi',
+      'INHALER': 'Thuốc hít',
+      'OINTMENT': 'Thuốc mỡ',
+      'CREAM': 'Kem bôi',
+      'GEL': 'Gel bôi',
+      'PATCH': 'Miếng dán',
+      'SUPPOSITORY': 'Thuốc đặt (âm đạo/hậu môn)',
+      'OTHER': 'Khác'
+    };
+    return typeMap[type] || type;
+  };
+
+  const getUnitDisplayName = (unit) => {
+    const unitMap = {
+      'MG': 'mg',
+      'G': 'g',
+      'MCG': 'mcg (µg)',
+      'IU': 'IU (đơn vị quốc tế)',
+      'UNIT': 'Unit (đơn vị chung)',
+      'ML': 'ml',
+      'L': 'L',
+      'DROPS': 'giọt',
+      'TABLET': 'viên',
+      'CAPSULE': 'viên nang',
+      'PATCH': 'miếng dán',
+      'SACHET': 'gói',
+      'AMPULE': 'ống',
+      'VIAL': 'lọ',
+      'MG_PER_ML': 'mg/ml',
+      'MG_PER_5ML': 'mg/5ml',
+      'IU_PER_ML': 'IU/ml',
+      'PERCENT': '%',
+      'OTHER': 'khác'
+    };
+    return unitMap[unit] || unit;
+  };
+
+  const checkPremiumLimit = async () => {
+    const medications = await getAllMedications();
+    return medications.length >= 3;
+  };
+
+  const addMedicationToReminder = async (medication) => {
+    try {
+      // Check if user has reached the 3-medication limit
+      const reachedLimit = await checkPremiumLimit();
+      
+      if (reachedLimit) {
+        setSelectedMedication(medication);
+        setShowPremiumModal(true);
+        return;
+      }
+
+      // Check if medication already exists
+      const existingMedications = await getAllMedications();
+      const exists = existingMedications.some(med => 
+        med.name.toLowerCase() === medication.name.toLowerCase()
+      );
+
+      if (exists) {
+        Alert.alert(
+          'Thông báo',
+          'Thuốc này đã có trong danh sách nhắc nhở của bạn.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Create new medication object
+      const newMedication = {
+        id: Date.now().toString(),
+        name: medication.name,
+        dosage: medication.strength || '1 viên',
+        time: '08:00',
+        days: ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'],
+        createdAt: new Date().toISOString(),
+      };
+
+      await saveMedication(newMedication);
+      
+      Alert.alert(
+        'Thành công!',
+        `Đã thêm "${medication.name}" vào danh sách nhắc nhở.\n\nBạn có thể chỉnh sửa liều lượng và thời gian trong tab "Thêm".`,
+        [{ text: 'OK' }]
+      );
+
+      // Reload user medications
+      loadUserMedications();
+      
+    } catch (error) {
+      Alert.alert('Lỗi', 'Không thể thêm thuốc vào nhắc nhở. Vui lòng thử lại.');
+    }
+  };
+
+  const handlePremiumUpgrade = () => {
+    setShowPremiumModal(false);
     Alert.alert(
-      'Thông tin thuốc',
-      `${medication.name}\nDanh mục: ${medication.category}`,
-      [
-        {
-          text: 'Đóng',
-          style: 'cancel'
-        },
-        {
-          text: 'Thêm vào nhắc nhở',
-          onPress: () => {
-            // Navigate to editor with pre-filled medication name
-            Alert.alert('Thông báo', 'Chức năng này sẽ được phát triển trong phiên bản sau');
-          }
-        }
-      ]
+      'Premium',
+      'Chức năng nâng cấp Premium sẽ được phát triển trong phiên bản tiếp theo.',
+      [{ text: 'OK' }]
     );
+  };
+
+  const handlePremiumCancel = () => {
+    setShowPremiumModal(false);
+    setSelectedMedication(null);
   };
 
   const renderMedicationItem = ({ item }) => (
@@ -146,6 +403,12 @@ export default function SearchScreen() {
       >
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Tìm kiếm thuốc</Text>
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => setShowAddMedicineModal(true)}
+          >
+            <Ionicons name="add-circle-outline" size={28} color={Colors.white} />
+          </TouchableOpacity>
         </View>
         
         {/* Search Bar */}
@@ -189,7 +452,7 @@ export default function SearchScreen() {
         {/* Results */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {searchText ? `Kết quả tìm kiếm (${filteredMedications.length})` : 'Thuốc phổ biến'}
+            {searchText ? `Kết quả tìm kiếm (${filteredMedications.length})` : 'Danh sách thuốc từ hệ thống'}
           </Text>
           <FlatList
             data={filteredMedications}
@@ -206,9 +469,303 @@ export default function SearchScreen() {
           />
         </View>
       </View>
-    </View>
-  );
-}
+        {/* Medicine Detail Modal */}
+        <Modal
+          visible={showMedicineDetail}
+          animationType="slide"
+          presentationStyle="pageSheet"
+        >
+          <View style={styles.detailModalContainer}>
+            <View style={styles.detailModalHeader}>
+              <TouchableOpacity 
+                onPress={() => setShowMedicineDetail(false)}
+              >
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={styles.detailModalTitle}>Chi tiết thuốc</Text>
+              <TouchableOpacity 
+                style={styles.addToReminderButton}
+                onPress={() => {
+                  addMedicationToReminder(selectedMedicineDetail);
+                  setShowMedicineDetail(false);
+                }}
+              >
+                <Text style={styles.addToReminderButtonText}>Thêm vào nhắc nhở</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.detailModalContent} showsVerticalScrollIndicator={false}>
+              {selectedMedicineDetail && (
+                <>
+                  {/* Hình ảnh thuốc */}
+                  {(selectedMedicineDetail.imageUrl || selectedMedicineDetail.imageurl) && (
+                    <View style={styles.medicineImageContainer}>
+                      <Image 
+                        source={{ uri: selectedMedicineDetail.imageUrl || selectedMedicineDetail.imageurl }}
+                        style={styles.medicineImage}
+                        resizeMode="cover"
+                        onError={() => console.log('Failed to load medicine image')}
+                      />
+                    </View>
+                  )}
+
+                  {/* Thông tin cơ bản */}
+                  <View style={styles.detailCard}>
+                    <Text style={styles.detailCardTitle}>Thông tin cơ bản</Text>
+                    
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>ID thuốc:</Text>
+                      <Text style={styles.detailValue}>#{selectedMedicineDetail.id}</Text>
+                    </View>
+                    
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tên thuốc:</Text>
+                      <Text style={styles.detailValue}>{selectedMedicineDetail.name}</Text>
+                    </View>
+                    
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Hàm lượng:</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedMedicineDetail.strength || 
+                         (selectedMedicineDetail.strengthvalue && selectedMedicineDetail.strengthUnit ? 
+                          `${selectedMedicineDetail.strengthvalue} ${getUnitDisplayName(selectedMedicineDetail.strengthUnit)}` : 
+                          'Chưa có thông tin')}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Dạng bào chế:</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedMedicineDetail.type ? getTypeDisplayName(selectedMedicineDetail.type) : 'Chưa có thông tin'}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Danh mục:</Text>
+                      <Text style={styles.detailValue}>{selectedMedicineDetail.category}</Text>
+                    </View>
+                  </View>
+
+                  {/* Ghi chú và hướng dẫn */}
+                  {selectedMedicineDetail.notes && (
+                    <View style={styles.detailCard}>
+                      <Text style={styles.detailCardTitle}>Ghi chú & Hướng dẫn sử dụng</Text>
+                      <Text style={styles.notesText}>{selectedMedicineDetail.notes}</Text>
+                    </View>
+                  )}
+
+              
+
+                  {/* Spacer */}
+                  <View style={{ height: 20 }} />
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </Modal>
+
+        {/* Add Medicine Modal */}
+        <Modal
+          visible={showAddMedicineModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+        >
+          <KeyboardAvoidingView 
+            style={styles.modalContainer}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={styles.modalHeader}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowAddMedicineModal(false);
+                  resetNewMedicineForm();
+                }}
+              >
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Thêm thuốc mới</Text>
+              <TouchableOpacity 
+                style={[styles.saveButton, addingMedicine && styles.saveButtonDisabled]}
+                onPress={handleAddMedicine}
+                disabled={addingMedicine}
+              >
+                <Text style={styles.saveButtonText}>
+                  {addingMedicine ? 'Đang lưu...' : 'Lưu'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.modalContent} 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              onScrollBeginDrag={() => {
+                setShowTypeDropdown(false);
+                setShowUnitDropdown(false);
+              }}
+            >
+              {/* Tên thuốc */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Tên thuốc *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newMedicine.name}
+                  onChangeText={(text) => setNewMedicine(prev => ({ ...prev, name: text }))}
+                  placeholder="Nhập tên thuốc"
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+
+              {/* Hàm lượng */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Hàm lượng *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newMedicine.strengthvalue}
+                  onChangeText={(text) => setNewMedicine(prev => ({ ...prev, strengthvalue: text }))}
+                  placeholder="Ví dụ: 500"
+                  keyboardType="numeric"
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+
+              {/* Đơn vị hàm lượng */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Đơn vị hàm lượng</Text>
+                <View style={styles.dropdownContainer}>
+                  <TouchableOpacity 
+                    style={styles.dropdown}
+                    onPress={() => setShowUnitDropdown(!showUnitDropdown)}
+                  >
+                    <Text style={styles.dropdownText}>
+                      {STRENGTH_UNITS.find(unit => unit.value === newMedicine.strengthUnit)?.label || 'mg'}
+                    </Text>
+                    <Ionicons 
+                      name={showUnitDropdown ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color={Colors.textMuted} 
+                    />
+                  </TouchableOpacity>
+                  {showUnitDropdown && (
+                    <View style={styles.dropdownList}>
+                      <ScrollView 
+                        style={styles.dropdownScrollView}
+                        nestedScrollEnabled={true}
+                        showsVerticalScrollIndicator={true}
+                      >
+                        {STRENGTH_UNITS.map(unit => (
+                          <TouchableOpacity
+                            key={unit.value}
+                            style={[
+                              styles.dropdownItem,
+                              newMedicine.strengthUnit === unit.value && styles.dropdownItemSelected
+                            ]}
+                            onPress={() => {
+                              setNewMedicine(prev => ({ ...prev, strengthUnit: unit.value }));
+                              setShowUnitDropdown(false);
+                            }}
+                          >
+                            <Text style={[
+                              styles.dropdownItemText,
+                              newMedicine.strengthUnit === unit.value && styles.dropdownItemTextSelected
+                            ]}>
+                              {unit.label}
+                            </Text>
+                            {newMedicine.strengthUnit === unit.value && (
+                              <Ionicons name="checkmark" size={20} color={Colors.primaryDark} />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Dạng bào chế */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Dạng bào chế</Text>
+                <View style={styles.dropdownContainer}>
+                  <TouchableOpacity 
+                    style={styles.dropdown}
+                    onPress={() => setShowTypeDropdown(!showTypeDropdown)}
+                  >
+                    <Text style={styles.dropdownText}>
+                      {MEDICINE_TYPES.find(type => type.value === newMedicine.type)?.label || 'Viên nén'}
+                    </Text>
+                    <Ionicons 
+                      name={showTypeDropdown ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color={Colors.textMuted} 
+                    />
+                  </TouchableOpacity>
+                  {showTypeDropdown && (
+                    <View style={styles.dropdownList}>
+                      <ScrollView 
+                        style={styles.dropdownScrollView}
+                        nestedScrollEnabled={true}
+                        showsVerticalScrollIndicator={true}
+                      >
+                        {MEDICINE_TYPES.map(type => (
+                          <TouchableOpacity
+                            key={type.value}
+                            style={[
+                              styles.dropdownItem,
+                              newMedicine.type === type.value && styles.dropdownItemSelected
+                            ]}
+                            onPress={() => {
+                              setNewMedicine(prev => ({ ...prev, type: type.value }));
+                              setShowTypeDropdown(false);
+                            }}
+                          >
+                            <Text style={[
+                              styles.dropdownItemText,
+                              newMedicine.type === type.value && styles.dropdownItemTextSelected
+                            ]}>
+                              {type.label}
+                            </Text>
+                            {newMedicine.type === type.value && (
+                              <Ionicons name="checkmark" size={20} color={Colors.primaryDark} />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* URL hình ảnh */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>URL hình ảnh</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newMedicine.imageurl}
+                  onChangeText={(text) => setNewMedicine(prev => ({ ...prev, imageurl: text }))}
+                  placeholder="https://example.com/image.jpg"
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+
+              {/* Ghi chú */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Ghi chú</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  value={newMedicine.notes}
+                  onChangeText={(text) => setNewMedicine(prev => ({ ...prev, notes: text }))}
+                  placeholder="Thông tin thêm về thuốc..."
+                  multiline
+                  numberOfLines={3}
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Modal>
+      </View>
+    );
+  }
 
 const styles = StyleSheet.create({
   container: {
@@ -223,8 +780,13 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 25,
   },
   headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+  },
+  addButton: {
+    padding: 4,
   },
   headerTitle: {
     fontSize: 24,
@@ -340,5 +902,217 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 5,
     textAlign: 'center',
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  saveButton: {
+    backgroundColor: Colors.primaryDark,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  dropdownContainer: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  dropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: Colors.textPrimary,
+  },
+  dropdownList: {
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    maxHeight: 200,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    overflow: 'hidden',
+  },
+  dropdownScrollView: {
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  dropdownItemSelected: {
+    backgroundColor: Colors.surface,
+  },
+  dropdownItemText: {
+    fontSize: 16,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  dropdownItemTextSelected: {
+    color: Colors.primaryDark,
+    fontWeight: '500',
+  },
+  // Detail Modal styles
+  detailModalContainer: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+  },
+  detailModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  detailModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  addToReminderButton: {
+    backgroundColor: Colors.primaryDark,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  addToReminderButtonText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  detailModalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  medicineImageContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 16,
+  },
+  medicineImage: {
+    width: 150,
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+  },
+  detailCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  detailCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    fontWeight: '500',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '400',
+    flex: 2,
+    textAlign: 'right',
+  },
+  notesText: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    lineHeight: 20,
+  },
+  urlText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    flex: 2,
+    textAlign: 'right',
+    fontStyle: 'italic',
   },
 });

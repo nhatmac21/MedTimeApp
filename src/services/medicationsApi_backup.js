@@ -40,21 +40,6 @@ const apiRequest = async (endpoint, options = {}) => {
   }
 };
 
-// Helper function to categorize medicine types
-const getTypeCategory = (type) => {
-  const categories = {
-    'TABLET': 'Viên nén',
-    'CAPSULE': 'Viên nang',
-    'INJECTION': 'Tiêm',
-    'SYRUP': 'Siro',
-    'CREAM': 'Kem bôi',
-    'OINTMENT': 'Thuốc mỡ',
-    'DROPS': 'Thuốc nhỏ',
-    'INHALER': 'Dạng hít',
-  };
-  return categories[type] || 'Khác';
-};
-
 // Fetch medicines from backend
 export async function fetchMedicinesFromBackend(pageNumber = 1, pageSize = 50) {
   try {
@@ -89,11 +74,25 @@ export async function fetchMedicinesFromBackend(pageNumber = 1, pageSize = 50) {
   }
 }
 
-// Search medicines from backend - fallback to client-side search
+// Helper function to categorize medicine types
+const getTypeCategory = (type) => {
+  const categories = {
+    'TABLET': 'Viên nén',
+    'CAPSULE': 'Viên nang',
+    'INJECTION': 'Tiêm',
+    'SYRUP': 'Siro',
+    'CREAM': 'Kem bôi',
+    'OINTMENT': 'Thuốc mỡ',
+    'DROPS': 'Thuốc nhỏ',
+    'INHALER': 'Dạng hít',
+  };
+  return categories[type] || 'Khác';
+};
+
+// Search medicines from backend
 export async function searchMedicinesFromBackend(searchTerm, pageNumber = 1, pageSize = 20) {
   try {
-    // First try to search with backend API (if supported)
-    const result = await apiRequest(`/medicine?name=${encodeURIComponent(searchTerm)}&pageNumber=${pageNumber}&pageSize=${pageSize}`);
+    const result = await apiRequest(`/medicine/search?name=${encodeURIComponent(searchTerm)}&pageNumber=${pageNumber}&pageSize=${pageSize}`);
     
     if (result.success) {
       return {
@@ -114,45 +113,7 @@ export async function searchMedicinesFromBackend(searchTerm, pageNumber = 1, pag
         }
       };
     } else {
-      throw new Error('Backend search not supported');
-    }
-  } catch (error) {
-    // Fallback to client-side search using all medicines
-    console.log('Backend search failed, using client-side search');
-    return await searchMedicinesClientSide(searchTerm, pageNumber, pageSize);
-  }
-}
-
-// Client-side search fallback
-async function searchMedicinesClientSide(searchTerm, pageNumber = 1, pageSize = 20) {
-  try {
-    // Get all medicines from backend
-    const result = await fetchMedicinesFromBackend(1, 100); // Get more items for search
-    
-    if (result.success) {
-      // Filter medicines on client side
-      const filteredMedicines = result.medicines.filter(medicine =>
-        medicine.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        medicine.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (medicine.notes && medicine.notes.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-
-      // Apply pagination
-      const startIndex = (pageNumber - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedResults = filteredMedicines.slice(startIndex, endIndex);
-
-      return {
-        success: true,
-        medicines: paginatedResults,
-        pagination: {
-          pageNumber: pageNumber,
-          totalCount: filteredMedicines.length,
-          hasNextPage: endIndex < filteredMedicines.length,
-        }
-      };
-    } else {
-      return { success: false, error: 'Không thể tìm kiếm thuốc' };
+      return { success: false, error: result.error };
     }
   } catch (error) {
     return { success: false, error: 'Không thể tìm kiếm thuốc' };
@@ -161,8 +122,10 @@ async function searchMedicinesClientSide(searchTerm, pageNumber = 1, pageSize = 
 
 // Fallback function for local medications (keeping existing functionality)
 export async function fetchMedicationsForDate(dateKey) {
+  // dateKey: 'YYYY-MM-DD' 
   const storedMeds = await loadMedications();
   
+  // Return stored medications with default pending status
   return storedMeds.map(med => ({
     ...med,
     times: med.times.map(time => ({
@@ -172,37 +135,9 @@ export async function fetchMedicationsForDate(dateKey) {
   }));
 }
 
-// Add new medicine to backend
-export async function addMedicineToBackend(medicineData) {
-  try {
-    const result = await apiRequest('/medicine', {
-      method: 'POST',
-      body: JSON.stringify(medicineData),
-    });
-
-    if (result.success) {
-      return {
-        success: true,
-        medicine: {
-          id: result.data.medicineid.toString(),
-          name: result.data.name,
-          strength: `${result.data.strengthvalue}${result.data.strengthUnit}`,
-          type: result.data.type,
-          imageUrl: result.data.imageurl,
-          notes: result.data.notes,
-          category: getTypeCategory(result.data.type),
-        }
-      };
-    } else {
-      return { success: false, error: result.error };
-    }
-  } catch (error) {
-    return { success: false, error: 'Không thể thêm thuốc mới' };
-  }
-}
-
 export async function markDose({ medId, time, status, takenAt, note }) {
   // TODO: Implement API call to mark dose status
+  // For now, just simulate success
   await new Promise((r) => setTimeout(r, 150));
   return { ok: true };
 }

@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,13 +57,16 @@ export default function LoginScreen({ navigation, onLoginSuccess }) {
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <LinearGradient
-          colors={[Colors.primary, Colors.primaryDark]}
+          colors={['#e8eeefe3', '#f1fafcff']}
           style={styles.header}
         >
           <View style={styles.headerContent}>
-            <Ionicons name="medical" size={60} color={Colors.white} />
-            <Text style={styles.appTitle}>MedTime</Text>
-            <Text style={styles.appSubtitle}>Nhắc nhở uống thuốc thông minh</Text>
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+            
           </View>
         </LinearGradient>
 
@@ -116,7 +120,7 @@ export default function LoginScreen({ navigation, onLoginSuccess }) {
             disabled={loading}
           >
             <LinearGradient
-              colors={[Colors.primary, Colors.primaryDark]}
+              colors={['#5BB5BF', '#4DA6B1']}
               style={styles.loginButtonGradient}
             >
               <Text style={styles.loginButtonText}>
@@ -147,31 +151,44 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   header: {
-    paddingTop: 60,
+    paddingTop: 70,
     paddingBottom: 40,
     alignItems: 'center',
+    justifyContent: 'center',
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
   headerContent: {
     alignItems: 'center',
   },
+  logoImage: {
+    width: 140,
+    height: 140,
+    marginBottom: 20,
+    borderRadius: 25,
+    overflow: 'hidden',
+  },
   appTitle: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 36,
+    fontWeight: '800',
     color: Colors.white,
-    marginTop: 15,
+    marginBottom: 8,
+    letterSpacing: 1,
   },
   appSubtitle: {
     fontSize: 16,
-    color: Colors.white,
+    fontWeight: '500',
+    color: '#49d2eb',
+    textAlign: 'center',
     opacity: 0.9,
-    marginTop: 5,
+    letterSpacing: 0.5,
   },
   formContainer: {
     flex: 1,
-    padding: 30,
-    justifyContent: 'center',
+    paddingHorizontal: 30,
+    paddingTop: 30,
+    paddingBottom: 20,
+    justifyContent: 'flex-start',
   },
   formTitle: {
     fontSize: 28,
@@ -241,6 +258,6 @@ const styles = StyleSheet.create({
   registerLink: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.primary,
+    color: '#5BB5BF',
   },
 });
