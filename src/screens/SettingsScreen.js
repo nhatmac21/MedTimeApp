@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { logoutUser, getCurrentUser } from '../services/auth';
 import AccountScreen from './AccountScreen';
+import SoundSettingsCard from '../components/SoundSettingsCard';
+import AlarmTestCard from '../components/AlarmTestCard';
 
 export default function SettingsScreen({ visible, onClose, onLogout }) {
   const [userInfo, setUserInfo] = useState(null);
@@ -146,6 +148,12 @@ export default function SettingsScreen({ visible, onClose, onLogout }) {
                 </View>
               </View>
             )}
+
+            {/* Sound Settings */}
+            <SoundSettingsCard />
+
+            {/* Alarm Test */}
+            <AlarmTestCard />
 
             {/* Settings Sections */}
             {settingsItems.map((section, sectionIndex) => (

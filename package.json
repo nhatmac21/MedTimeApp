@@ -16,6 +16,7 @@
     "@react-navigation/native": "^6.1.17",
     "dayjs": "^1.11.13",
     "expo": "~54.0.10",
+    "expo-av": "^16.0.7",
     "expo-linear-gradient": "~15.0.7",
     "expo-notifications": "~0.32.11",
     "expo-status-bar": "~3.0.8",
