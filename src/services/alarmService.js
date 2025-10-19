@@ -1,21 +1,16 @@
-import { Audio } from 'expo-av';
+import { AudioPlayer } from 'expo-audio';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SOUND_ENABLED_KEY = '@medtime_sound_enabled';
 
-let currentSound = null;
+let currentPlayer = null;
 
 // Initialize audio settings
 export const initializeAudio = async () => {
   try {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-    });
+    // expo-audio doesn't require explicit initialization like expo-av
+    console.log('Audio system ready');
   } catch (error) {
     console.log('Error initializing audio:', error);
   }
@@ -46,30 +41,25 @@ export const playMedicationAlarm = async () => {
     const soundEnabled = await isSoundEnabled();
     if (!soundEnabled) return;
 
-    // Stop current sound if playing
-    if (currentSound) {
-      await currentSound.unloadAsync();
-      currentSound = null;
+    // Stop current player if playing
+    if (currentPlayer) {
+      await currentPlayer.stop();
+      currentPlayer = null;
     }
 
-    // Load and play new sound
-    const { sound } = await Audio.Sound.createAsync(
-      require('../../assets/sounds/alarm1.mp3'),
-      {
-        shouldPlay: true,
-        isLooping: true,
-        volume: 1.0,
-      }
-    );
-    
-    currentSound = sound;
+    // Create and play new audio
+    currentPlayer = new AudioPlayer(require('../../assets/sounds/alarm1.mp3'));
+    await currentPlayer.play({
+      loop: true,
+      volume: 1.0,
+    });
     
     // Auto stop after 30 seconds if still playing
     setTimeout(() => {
       stopMedicationAlarm();
     }, 30000);
 
-    return sound;
+    return currentPlayer;
   } catch (error) {
     console.log('Error playing medication alarm:', error);
     return null;
@@ -79,10 +69,9 @@ export const playMedicationAlarm = async () => {
 // Stop medication alarm
 export const stopMedicationAlarm = async () => {
   try {
-    if (currentSound) {
-      await currentSound.stopAsync();
-      await currentSound.unloadAsync();
-      currentSound = null;
+    if (currentPlayer) {
+      await currentPlayer.stop();
+      currentPlayer = null;
     }
   } catch (error) {
     console.log('Error stopping medication alarm:', error);

@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { logoutUser, getCurrentUser } from '../services/auth';
+import { logoutUser, getCurrentUser, linkGuardian, getGuardianLinks } from '../services/auth';
 import SettingsScreen from './SettingsScreen';
 
 export default function CaregiverScreen({ onLogout }) {
@@ -21,9 +21,12 @@ export default function CaregiverScreen({ onLogout }) {
   const [searchCode, setSearchCode] = useState('');
   const [userInfo, setUserInfo] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [guardianLinks, setGuardianLinks] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadUserInfo();
+    loadGuardianLinks();
   }, []);
 
   const loadUserInfo = async () => {
@@ -32,6 +35,55 @@ export default function CaregiverScreen({ onLogout }) {
       setUserInfo(user);
     }
   };
+
+  const loadGuardianLinks = async () => {
+    setLoading(true);
+    try {
+      const result = await getGuardianLinks();
+      if (result.success && result.data?.items) {
+        setGuardianLinks(result.data.items);
+      } else {
+        setGuardianLinks([]);
+      }
+    } catch (error) {
+      console.log('Error loading guardian links:', error);
+      setGuardianLinks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLinkGuardian = async () => {
+    if (!searchCode.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập mã giám sát');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await linkGuardian(searchCode.trim());
+      
+      if (result.success) {
+        Alert.alert('Thành công', 'Đã liên kết với người giám sát thành công!', [
+          {
+            text: 'OK',
+            onPress: () => {
+              setSearchCode('');
+              setCurrentView('monitoring');
+              loadGuardianLinks(); // Reload guardian links
+            }
+          }
+        ]);
+      } else {
+        Alert.alert('Lỗi', result.error || 'Không thể liên kết với người giám sát');
+      }
+    } catch (error) {
+      Alert.alert('Lỗi', 'Lỗi kết nối, vui lòng thử lại');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     Alert.alert(
       'Đăng xuất',
@@ -156,36 +208,56 @@ export default function CaregiverScreen({ onLogout }) {
             <Ionicons name="chevron-back" size={24} color={Colors.white} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Giám sát</Text>
-          <TouchableOpacity style={styles.settingsButton} onPress={() => setShowSettings(true)}>
-            <Ionicons name="settings-outline" size={24} color={Colors.white} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              style={styles.refreshButton} 
+              onPress={loadGuardianLinks}
+              disabled={loading}
+            >
+              <Ionicons 
+                name="refresh-outline" 
+                size={22} 
+                color={loading ? Colors.textMuted : Colors.white} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.settingsButton} onPress={() => setShowSettings(true)}>
+              <Ionicons name="settings-outline" size={24} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
         </View>
       </LinearGradient>
 
       {/* Content */}
       <View style={styles.content}>
         {/* Guardian Cards */}
-        <View style={styles.guardianList}>
-          <TouchableOpacity style={styles.guardianCard}>
-            <View style={styles.guardianInfo}>
-              <Text style={styles.guardianName}>Trần Văn C</Text>
-              <Text style={styles.guardianRole}>Bố</Text>
+        <ScrollView style={styles.guardianList} showsVerticalScrollIndicator={false}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Đang tải...</Text>
             </View>
-            <View style={styles.guardianAvatar}>
-              <Ionicons name="person" size={24} color={Colors.primary} />
+          ) : guardianLinks.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color={Colors.textMuted} />
+              <Text style={styles.emptyStateText}>Chưa có người giám sát</Text>
+              <Text style={styles.emptyStateSubtext}>Nhấn nút "Thêm" để thêm người giám sát</Text>
             </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.guardianCard}>
-            <View style={styles.guardianInfo}>
-              <Text style={styles.guardianName}>Nguyễn Thị D</Text>
-              <Text style={styles.guardianRole}>Mẹ</Text>
-            </View>
-            <View style={styles.guardianAvatar}>
-              <Ionicons name="person" size={24} color={Colors.primary} />
-            </View>
-          </TouchableOpacity>
-        </View>
+          ) : (
+            guardianLinks.map((guardian, index) => (
+              <TouchableOpacity key={index} style={styles.guardianCard}>
+                <View style={styles.guardianInfo}>
+                  <Text style={styles.guardianName}>Người giám sát #{guardian.guardianid}</Text>
+                  <Text style={styles.guardianRole}>Guardian ID: {guardian.guardianid}</Text>
+                  <Text style={styles.guardianDate}>
+                    Liên kết: {new Date(guardian.createdat).toLocaleDateString('vi-VN')}
+                  </Text>
+                </View>
+                <View style={styles.guardianAvatar}>
+                  <Ionicons name="person" size={24} color={Colors.primary} />
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
 
         {/* Add Button */}
         <TouchableOpacity 
@@ -236,15 +308,24 @@ export default function CaregiverScreen({ onLogout }) {
           <View style={styles.searchInputContainer}>
             <TextInput
               style={styles.searchInput}
-              placeholder="Nhập mã code..."
+              placeholder="Nhập mã giám sát..."
               placeholderTextColor={Colors.textMuted}
               value={searchCode}
               onChangeText={setSearchCode}
+              editable={!loading}
             />
-            <TouchableOpacity style={styles.searchButton}>
-              <Ionicons name="search" size={20} color={Colors.primary} />
-            </TouchableOpacity>
           </View>
+          
+          {/* Giám sát Button */}
+          <TouchableOpacity 
+            style={[styles.monitorButton, loading && styles.monitorButtonDisabled]}
+            onPress={handleLinkGuardian}
+            disabled={loading}
+          >
+            <Text style={styles.monitorButtonText}>
+              {loading ? 'Đang xử lý...' : 'Giám sát'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -511,5 +592,71 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  guardianDate: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 4,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.textMuted,
+  },
+  monitorButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 15,
+    paddingVertical: 15,
+    paddingHorizontal: 25,
+    marginTop: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: Colors.shadow,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  monitorButtonDisabled: {
+    backgroundColor: Colors.textMuted,
+    opacity: 0.6,
+  },
+  monitorButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  refreshButton: {
+    padding: 8,
+    marginRight: 8,
   },
 });

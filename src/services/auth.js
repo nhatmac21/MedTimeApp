@@ -266,3 +266,37 @@ export const updateUserInfo = async (userId, userData) => {
     return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
   }
 };
+
+// Guardian Link API functions
+export const linkGuardian = async (uniquecode) => {
+  try {
+    const result = await apiRequest('/guardianlink', {
+      method: 'POST',
+      body: JSON.stringify({ uniquecode }),
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể liên kết với người giám sát' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
+export const getGuardianLinks = async () => {
+  try {
+    const result = await apiRequest('/guardianlink', {
+      method: 'GET',
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể tải danh sách người giám sát' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
