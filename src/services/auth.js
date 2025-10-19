@@ -300,3 +300,87 @@ export const getGuardianLinks = async () => {
     return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
   }
 };
+
+// Prescription API functions
+export const getPrescriptions = async () => {
+  try {
+    const result = await apiRequest('/prescription', {
+      method: 'GET',
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể tải danh sách thuốc' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
+export const getPrescriptionSchedules = async () => {
+  try {
+    const result = await apiRequest('/prescriptionschedule', {
+      method: 'GET',
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể tải lịch trình thuốc' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
+export const updatePrescriptionSchedule = async (scheduleId, scheduleData) => {
+  try {
+    const result = await apiRequest(`/prescriptionschedule/${scheduleId}`, {
+      method: 'PUT',
+      body: JSON.stringify(scheduleData),
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể cập nhật lịch trình' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
+export const createPrescription = async (prescriptionData) => {
+  try {
+    const result = await apiRequest('/prescription', {
+      method: 'POST',
+      body: JSON.stringify(prescriptionData),
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể tạo nhắc nhở' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
+// Medicine API functions
+export const getMedicines = async (pageNumber = 1, pageSize = 50) => {
+  try {
+    const result = await apiRequest(`/medicine?pageNumber=${pageNumber}&pageSize=${pageSize}`, {
+      method: 'GET',
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể tải danh sách thuốc' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
