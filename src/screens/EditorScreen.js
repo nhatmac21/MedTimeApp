@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { getPrescriptions, getMedicines, createPrescription } from '../services/auth';
+import { getPrescriptions, getMedicines, createPrescription, deletePrescription } from '../services/auth';
 
 export default function EditorScreen({ navigation }) {
   const [prescriptions, setPrescriptions] = useState([]);
@@ -158,6 +158,36 @@ export default function EditorScreen({ navigation }) {
     }
   };
 
+  const handleDeletePrescription = (prescription) => {
+    Alert.alert(
+      'Xác nhận xóa',
+      `Bạn có chắc muốn xóa nhắc nhở "${medicineMap[prescription.medicineid] || 'thuốc này'}"?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const result = await deletePrescription(prescription.prescriptionid);
+              if (result.success) {
+                Alert.alert('Thành công', 'Đã xóa nhắc nhở thành công');
+                loadData();
+              } else {
+                Alert.alert('Lỗi', result.error);
+              }
+            } catch (error) {
+              Alert.alert('Lỗi', 'Không thể xóa nhắc nhở');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderPrescriptionItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.prescriptionCard}
@@ -165,14 +195,22 @@ export default function EditorScreen({ navigation }) {
       activeOpacity={0.7}
     >
       <View style={styles.cardHeader}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.medicineName}>
             {medicineMap[item.medicineid] || `Thuốc ID: ${item.medicineid}`}
           </Text>
           <Text style={styles.dosage}>{item.dosage}</Text>
         </View>
-        <View style={styles.frequencyBadge}>
-          <Text style={styles.frequencyText}>{item.frequencyperday}x/ngày</Text>
+        <View style={styles.cardActions}>
+          <View style={styles.frequencyBadge}>
+            <Text style={styles.frequencyText}>{item.frequencyperday}x/ngày</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.deleteButton}
+            onPress={() => handleDeletePrescription(item)}
+          >
+            <Ionicons name="trash-outline" size={20} color={Colors.error} />
+          </TouchableOpacity>
         </View>
       </View>
       
@@ -198,7 +236,18 @@ export default function EditorScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
+          <View style={styles.headerLeft} />
           <Text style={styles.title}>Thêm đơn thuốc</Text>
+          <TouchableOpacity 
+            style={styles.reloadButton}
+            disabled={true}
+          >
+            <Ionicons 
+              name="reload-outline" 
+              size={24} 
+              color={Colors.textMuted} 
+            />
+          </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -211,7 +260,19 @@ export default function EditorScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <View style={styles.headerLeft} />
         <Text style={styles.title}>Thêm đơn thuốc</Text>
+        <TouchableOpacity 
+          style={styles.reloadButton}
+          onPress={() => loadData()}
+          disabled={loading}
+        >
+          <Ionicons 
+            name="reload-outline" 
+            size={24} 
+            color={loading ? Colors.textMuted : Colors.primary} 
+          />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
@@ -502,7 +563,7 @@ const styles = StyleSheet.create({
   },
   header: { 
     flexDirection: 'row', 
-    justifyContent: 'center', 
+    justifyContent: 'space-between', 
     alignItems: 'center', 
     paddingHorizontal: 20, 
     paddingVertical: 16,
@@ -513,7 +574,17 @@ const styles = StyleSheet.create({
   title: { 
     fontSize: 20, 
     fontWeight: '700', 
-    color: Colors.textPrimary 
+    color: Colors.textPrimary,
+    flex: 1,
+    textAlign: 'center'
+  },
+  reloadButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.primary + '10',
+  },
+  headerLeft: {
+    width: 40, // Same width as reload button to balance the layout
   },
   
   loadingContainer: {
@@ -575,6 +646,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   medicineName: {
     fontSize: 18,
     fontWeight: '600',
@@ -595,6 +671,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.error + '10',
   },
   cardContent: {
     gap: 8,

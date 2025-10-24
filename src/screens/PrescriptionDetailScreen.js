@@ -18,7 +18,8 @@ import {
   getPrescriptionSchedules, 
   updatePrescriptionSchedule, 
   getMedicines,
-  getPrescriptions 
+  getPrescriptions,
+  updatePrescription
 } from '../services/auth';
 
 export default function PrescriptionDetailScreen({ route, navigation }) {
@@ -114,10 +115,6 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
 
   const handleUpdatePrescription = async () => {
     // Validate form
-    if (!editForm.medicineid) {
-      Alert.alert('Lỗi', 'Vui lòng chọn thuốc');
-      return;
-    }
     if (!editForm.dosage.trim()) {
       Alert.alert('Lỗi', 'Vui lòng nhập liều lượng');
       return;
@@ -135,17 +132,22 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
     setSaving(true);
     try {
       const prescriptionData = {
-        medicineid: parseInt(editForm.medicineid),
         dosage: editForm.dosage.trim(),
         frequencyperday: editForm.frequencyperday,
         startdate: editForm.startdate,
         enddate: editForm.enddate,
-        remainingquantity: prescription.remainingquantity,
-        doctorname: prescription.doctorname,
+        remainingquantity: prescription.remainingquantity || 2147483647,
+        doctorname: prescription.doctorname || "string",
         notes: editForm.notes.trim() || null
       };
 
-      const result = await updatePrescriptionSchedule(prescription.prescriptionid, prescriptionData);
+      console.log('=== UPDATING PRESCRIPTION ===');
+      console.log('Prescription ID:', prescription.prescriptionid);
+      console.log('Prescription Data:', prescriptionData);
+
+      const result = await updatePrescription(prescription.prescriptionid, prescriptionData);
+
+      console.log('Update Result:', result);
 
       if (result.success) {
         Alert.alert('Thành công', 'Đã cập nhật đơn thuốc thành công!', [
@@ -293,56 +295,21 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
           <Text style={styles.sectionTitle}>Thông tin thuốc</Text>
           
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Chọn thuốc *</Text>
-            <TouchableOpacity 
-              style={styles.dropdownButton}
-              onPress={() => setShowMedicineDropdown(!showMedicineDropdown)}
-            >
-              <Text style={[
-                styles.dropdownButtonText, 
-                !editForm.medicineid && styles.dropdownPlaceholderText
-              ]}>
+            <Text style={styles.inputLabel}>Tên thuốc</Text>
+            <View style={[styles.dropdownButton, styles.disabledInput]}>
+              <Text style={styles.dropdownButtonText}>
                 {editForm.medicineid ? 
                   getMedicineName(editForm.medicineid) : 
-                  'Chọn thuốc từ danh sách'
+                  'Không xác định'
                 }
               </Text>
               <Ionicons 
-                name={showMedicineDropdown ? "chevron-up" : "chevron-down"} 
-                size={20} 
+                name="lock-closed-outline" 
+                size={16} 
                 color={Colors.textMuted} 
               />
-            </TouchableOpacity>
-            
-            {showMedicineDropdown && (
-              <View style={styles.dropdownList}>
-                <ScrollView style={styles.medicineDropdown} nestedScrollEnabled={true}>
-                  {medicines.map((medicine) => (
-                    <TouchableOpacity 
-                      key={medicine.medicineid}
-                      style={[
-                        styles.medicineOption,
-                        editForm.medicineid === medicine.medicineid.toString() && styles.selectedMedicineOption
-                      ]}
-                      onPress={() => {
-                        setEditForm({...editForm, medicineid: medicine.medicineid.toString()});
-                        setShowMedicineDropdown(false);
-                      }}
-                    >
-                      <Text style={[
-                        styles.medicineOptionText,
-                        editForm.medicineid === medicine.medicineid.toString() && styles.selectedMedicineOptionText
-                      ]}>
-                        {medicine.name}
-                      </Text>
-                      <Text style={styles.medicineOptionDetail}>
-                        {medicine.strengthvalue}{medicine.strengthunit} - {medicine.type}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
+            </View>
+            <Text style={styles.helperText}>Không thể thay đổi thuốc sau khi tạo</Text>
           </View>
 
           <View style={styles.inputGroup}>
@@ -660,6 +627,16 @@ const styles = StyleSheet.create({
   },
   dropdownPlaceholderText: {
     color: Colors.textMuted,
+  },
+  disabledInput: {
+    backgroundColor: Colors.surface,
+    opacity: 0.8,
+  },
+  helperText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   dropdownList: {
     marginTop: 4,

@@ -437,6 +437,52 @@ export const createPrescription = async (prescriptionData) => {
   }
 };
 
+export const updatePrescription = async (prescriptionId, prescriptionData) => {
+  try {
+    console.log('=== UPDATE PRESCRIPTION ===');
+    console.log('Prescription ID:', prescriptionId);
+    console.log('Prescription Data:', prescriptionData);
+    
+    const result = await apiRequest(`/prescription/${prescriptionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(prescriptionData),
+    });
+    
+    console.log('Update Result:', result);
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể cập nhật nhắc nhở' };
+    }
+  } catch (error) {
+    console.log('Update Error:', error);
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
+export const deletePrescription = async (prescriptionId) => {
+  try {
+    console.log('=== DELETE PRESCRIPTION ===');
+    console.log('Prescription ID:', prescriptionId);
+    
+    const result = await apiRequest(`/prescription/${prescriptionId}`, {
+      method: 'DELETE',
+    });
+    
+    console.log('Delete Result:', result);
+    
+    if (result.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: result.error || 'Không thể xóa nhắc nhở' };
+    }
+  } catch (error) {
+    console.log('Delete Error:', error);
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
 // Medicine API functions
 export const getMedicines = async (pageNumber = 1, pageSize = 50) => {
   try {
