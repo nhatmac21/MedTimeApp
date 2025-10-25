@@ -1,29 +1,85 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import RootNavigator from './src/navigation/RootNavigator';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import { Colors } from './src/theme/colors';
 import { isLoggedIn } from './src/services/auth';
+import { initializeAudio, startMedicationMonitoring, stopMedicationMonitoring } from './src/services/alarmService';
+import { fetchMedicationsForDate } from './src/services/medicationsApi';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const monitoringInterval = useRef(null);
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
-    checkLoginStatus();
+    initializeApp();
+    
+    // Handle app state changes
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      subscription?.remove();
+      if (monitoringInterval.current) {
+        stopMedicationMonitoring(monitoringInterval.current);
+      }
+    };
   }, []);
 
-  const checkLoginStatus = async () => {
+  useEffect(() => {
+    if (isAuthenticated) {
+      startMonitoring();
+    } else {
+      stopMonitoring();
+    }
+  }, [isAuthenticated]);
+
+  const initializeApp = async () => {
     try {
+      // Initialize audio system
+      await initializeAudio();
+      
+      // Check login status
       const loggedIn = await isLoggedIn();
       setIsAuthenticated(loggedIn);
     } catch (error) {
-      console.log('Error checking login status:', error);
+      console.log('Error initializing app:', error);
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleAppStateChange = (nextAppState) => {
+    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      // App has come to the foreground, restart monitoring if authenticated
+      if (isAuthenticated) {
+        startMonitoring();
+      }
+    }
+    appState.current = nextAppState;
+  };
+
+  const startMonitoring = async () => {
+    try {
+      // Stop existing monitoring
+      stopMonitoring();
+      
+      // Start medication monitoring
+      monitoringInterval.current = startMedicationMonitoring();
+      console.log('Started medication monitoring');
+    } catch (error) {
+      console.log('Error starting medication monitoring:', error);
+    }
+  };
+
+  const stopMonitoring = () => {
+    if (monitoringInterval.current) {
+      stopMedicationMonitoring(monitoringInterval.current);
+      monitoringInterval.current = null;
     }
   };
 
