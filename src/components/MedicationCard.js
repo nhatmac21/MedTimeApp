@@ -23,7 +23,7 @@ export default function MedicationCard({
     <View style={[styles.wrapper, isSkipped && styles.wrapperAlt]}>
       <View style={styles.left}>
         <Text style={styles.title}>{name}</Text>
-        <Text style={styles.sub}>{dosage}, uống {quantity} viên</Text>
+        <Text style={styles.sub}>{dosage}{quantity ? `, ${quantity}` : ''}</Text>
         {!!takenInfo && <Text style={styles.note}>{takenInfo}</Text>}
       </View>
       <View style={styles.actionGroup}>
