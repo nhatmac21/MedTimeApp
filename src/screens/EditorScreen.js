@@ -21,6 +21,9 @@ export default function EditorScreen({ navigation }) {
   const [medicines, setMedicines] = useState([]);
   const [medicineMap, setMedicineMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
@@ -39,8 +42,15 @@ export default function EditorScreen({ navigation }) {
     loadData();
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (isRefresh = false) => {
+    if (isRefresh) {
+      setLoading(true);
+      setCurrentPage(1);
+      setHasMore(true);
+    } else {
+      setLoading(true);
+    }
+    
     try {
       const medicinesResult = await getMedicines(1, 100);
       if (medicinesResult.success) {
@@ -54,14 +64,42 @@ export default function EditorScreen({ navigation }) {
         setMedicineMap(mapping);
       }
 
-      const prescriptionsResult = await getPrescriptions(1, 100);
+      const prescriptionsResult = await getPrescriptions(1, 20);
       if (prescriptionsResult.success) {
-        setPrescriptions(prescriptionsResult.data.items || []);
+        const newPrescriptions = prescriptionsResult.data.items || [];
+        setPrescriptions(newPrescriptions);
+        setHasMore(newPrescriptions.length >= 20);
       }
     } catch (error) {
       console.log('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreData = async () => {
+    if (loadingMore || !hasMore) return;
+    
+    setLoadingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      const prescriptionsResult = await getPrescriptions(nextPage, 20);
+      
+      if (prescriptionsResult.success) {
+        const newPrescriptions = prescriptionsResult.data.items || [];
+        
+        if (newPrescriptions.length > 0) {
+          setPrescriptions(prev => [...prev, ...newPrescriptions]);
+          setCurrentPage(nextPage);
+          setHasMore(newPrescriptions.length >= 20);
+        } else {
+          setHasMore(false);
+        }
+      }
+    } catch (error) {
+      console.log('Error loading more data:', error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -264,7 +302,7 @@ export default function EditorScreen({ navigation }) {
         <Text style={styles.title}>Thêm đơn thuốc</Text>
         <TouchableOpacity 
           style={styles.reloadButton}
-          onPress={() => loadData()}
+          onPress={() => loadData(true)}
           disabled={loading}
         >
           <Ionicons 
@@ -291,6 +329,16 @@ export default function EditorScreen({ navigation }) {
             keyExtractor={(item) => item.prescriptionid.toString()}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
+            onEndReached={loadMoreData}
+            onEndReachedThreshold={0.3}
+            ListFooterComponent={() => (
+              loadingMore ? (
+                <View style={styles.loadingMoreContainer}>
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <Text style={styles.loadingMoreText}>Đang tải thêm...</Text>
+                </View>
+              ) : null
+            )}
           />
         )}
       </View>
@@ -595,6 +643,16 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    color: Colors.textMuted,
+  },
+  loadingMoreContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingMoreText: {
+    marginTop: 8,
+    fontSize: 14,
     color: Colors.textMuted,
   },
 

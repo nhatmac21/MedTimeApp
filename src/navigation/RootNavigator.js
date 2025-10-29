@@ -32,7 +32,10 @@ export default function RootNavigator({ onLogout }) {
           },
         })}
       >
-        <Tab.Screen name="Trang chủ" component={HomeScreen} />
+        <Tab.Screen 
+          name="Trang chủ" 
+          children={(props) => <HomeScreen {...props} onLogout={onLogout} />} 
+        />
         <Tab.Screen name="Thêm" component={EditorStackNavigator} />
         <Tab.Screen name="Tìm" component={SearchScreen} />
         <Tab.Screen 

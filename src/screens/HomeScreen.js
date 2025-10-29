@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Text, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import Dayjs from 'dayjs';
 import { Colors } from '../theme/colors';
 import DayCarousel from '../components/DayCarousel';
@@ -8,14 +9,17 @@ import MedicationCard from '../components/MedicationCard';
 import useClock from '../hooks/useClock';
 import { getPrescriptions, getPrescriptionSchedules, getMedicines } from '../services/auth';
 import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
+import SettingsScreen from './SettingsScreen';
 
-export default function HomeScreen({ navigation, route }) {
+
+export default function HomeScreen({ navigation, route, onLogout }) {
   const now = useClock(1000);
   const [date, setDate] = useState(Dayjs());
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [medicines, setMedicines] = useState({});
+  const [showSettings, setShowSettings] = useState(false);
 
   const loadMedicationsForDate = async (selectedDate, showRefreshIndicator = false) => {
     try {
@@ -35,8 +39,8 @@ export default function HomeScreen({ navigation, route }) {
         setMedicines(medicineMap);
       }
 
-      // Load prescriptions
-      const prescriptionsResult = await getPrescriptions();
+      // Load prescriptions (load more items for HomeScreen to filter by date)
+      const prescriptionsResult = await getPrescriptions(1, 100);
       console.log('Prescriptions result:', prescriptionsResult);
       
       if (!prescriptionsResult || !prescriptionsResult.success || !prescriptionsResult.data || !prescriptionsResult.data.items || prescriptionsResult.data.items.length === 0) {
@@ -50,8 +54,8 @@ export default function HomeScreen({ navigation, route }) {
       const prescriptions = prescriptionsResult.data.items;
       console.log('Prescriptions array:', prescriptions);
 
-      // Load prescription schedules
-      const schedulesResult = await getPrescriptionSchedules();
+      // Load prescription schedules (load more items for HomeScreen to filter by date)
+      const schedulesResult = await getPrescriptionSchedules(1, 100);
       console.log('Schedules result:', schedulesResult);
       
       if (!schedulesResult || !schedulesResult.success || !schedulesResult.data || !schedulesResult.data.items) {
@@ -134,6 +138,14 @@ export default function HomeScreen({ navigation, route }) {
     loadMedicationsForDate(date);
   }, [date]);
 
+  // Reload data when screen comes into focus (e.g., after login)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('HomeScreen: Screen focused, reloading data');
+      loadMedicationsForDate(date);
+    }, [date])
+  );
+
   // Listen for navigation params to reload data
   useEffect(() => {
     if (route.params?.shouldReload) {
@@ -143,19 +155,6 @@ export default function HomeScreen({ navigation, route }) {
       navigation.setParams({ shouldReload: false });
     }
   }, [route.params?.shouldReload, date, navigation]);
-
-  // Also reload when screen comes into focus (but only if no shouldReload param)
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // Only reload on focus if not already reloading due to shouldReload
-      if (!route.params?.shouldReload) {
-        console.log('HomeScreen: Reloading data due to focus');
-        loadMedicationsForDate(date);
-      }
-    });
-
-    return unsubscribe;
-  }, [navigation, date, route.params?.shouldReload]);
 
   // Lên lịch thông báo cho các liều chưa uống
   useEffect(() => {
@@ -210,7 +209,7 @@ export default function HomeScreen({ navigation, route }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <DayCarousel date={date} onSelect={setDate} />
+        <DayCarousel date={date} onSelect={setDate} onSettingsPress={() => setShowSettings(true)} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Đang tải danh sách thuốc...</Text>
@@ -220,46 +219,54 @@ export default function HomeScreen({ navigation, route }) {
   }
 
   return (
-    <View style={styles.container}>
-      <DayCarousel date={date} onSelect={setDate} />
-      {isRefreshing && (
-        <View style={styles.refreshIndicator}>
-          <Text style={styles.refreshText}>🔄 Đang cập nhật danh sách thuốc...</Text>
-        </View>
-      )}
-      <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 30 }}>
-        {grouped.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Không có thuốc nào trong ngày này</Text>
+    <>
+      <View style={styles.container}>
+        <DayCarousel date={date} onSelect={setDate} onSettingsPress={() => setShowSettings(true)} />
+        {isRefreshing && (
+          <View style={styles.refreshIndicator}>
+            <Text style={styles.refreshText}>🔄 Đang cập nhật danh sách thuốc...</Text>
           </View>
-        ) : (
-          grouped.map(([time, medications]) => (
-            <View key={time}>
-              <SectionHeader title={time} />
-              {medications.map((med) => (
-                <MedicationCard
-                  key={med.id}
-                  name={med.name}
-                  dosage={med.dosage}
-                  quantity={med.notes || ''}
-                  status={med.status}
-                  takenInfo={
-                    med.status === 'taken'
-                      ? `Đã uống lúc ${med.takenAt}`
-                      : med.status === 'skipped'
-                      ? `Bỏ qua lúc ${time}`
-                      : ''
-                  }
-                  onTake={() => handleMarkTaken(med)}
-                  onSkip={() => handleMarkSkipped(med)}
-                  onDelete={null} // Disable delete for now, can be added later
-                />
-              ))}
-            </View>
-          ))
         )}
-      </ScrollView>
-    </View>
+        <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 30 }}>
+          {grouped.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>Không có thuốc nào trong ngày này</Text>
+            </View>
+          ) : (
+            grouped.map(([time, medications]) => (
+              <View key={time}>
+                <SectionHeader title={time} />
+                {medications.map((med) => (
+                  <MedicationCard
+                    key={med.id}
+                    name={med.name}
+                    dosage={med.dosage}
+                    quantity={med.notes || ''}
+                    status={med.status}
+                    takenInfo={
+                      med.status === 'taken'
+                        ? `Đã uống lúc ${med.takenAt}`
+                        : med.status === 'skipped'
+                        ? `Bỏ qua lúc ${time}`
+                        : ''
+                    }
+                    onTake={() => handleMarkTaken(med)}
+                    onSkip={() => handleMarkSkipped(med)}
+                    onDelete={null} // Disable delete for now, can be added later
+                  />
+                ))}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </View>
+      
+      <SettingsScreen
+        visible={showSettings}
+        onClose={() => setShowSettings(false)}
+        onLogout={onLogout}
+      />
+    </>
   );
 }
 
