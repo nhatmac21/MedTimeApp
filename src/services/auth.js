@@ -350,9 +350,9 @@ export const getGuardianLinks = async () => {
 };
 
 // Prescription API functions
-export const getPrescriptions = async () => {
+export const getPrescriptions = async (pageNumber = 1, pageSize = 20) => {
   try {
-    const result = await apiRequest('/prescription', {
+    const result = await apiRequest(`/prescription?PageNumber=${pageNumber}&PageSize=${pageSize}`, {
       method: 'GET',
     });
     
@@ -366,9 +366,9 @@ export const getPrescriptions = async () => {
   }
 };
 
-export const getPrescriptionSchedules = async () => {
+export const getPrescriptionSchedules = async (pageNumber = 1, pageSize = 20) => {
   try {
-    const result = await apiRequest('/prescriptionschedule', {
+    const result = await apiRequest(`/prescriptionschedule?PageNumber=${pageNumber}&PageSize=${pageSize}`, {
       method: 'GET',
     });
     
