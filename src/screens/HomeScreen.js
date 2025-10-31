@@ -31,12 +31,13 @@ export default function HomeScreen({ navigation, route, onLogout }) {
 
       // Load medicines for name mapping
       const medicinesResult = await getMedicines(1, 100);
+      const medicineMap = {};
       if (medicinesResult.success) {
-        const medicineMap = {};
         medicinesResult.data.items.forEach(med => {
           medicineMap[med.medicineid] = med.name;
         });
         setMedicines(medicineMap);
+        console.log('Medicine map loaded:', medicineMap);
       }
 
       // Load prescriptions (load more items for HomeScreen to filter by date)
@@ -80,7 +81,6 @@ export default function HomeScreen({ navigation, route, onLogout }) {
 
       // Combine prescriptions with schedules
       const medications = [];
-      const medicineMap = medicines; // Use the medicineMap from state
       
       activePrescriptions.forEach(prescription => {
         const prescriptionSchedules = schedulesResult.data.items.filter(
@@ -159,7 +159,12 @@ export default function HomeScreen({ navigation, route, onLogout }) {
   // Lên lịch thông báo cho các liều chưa uống
   useEffect(() => {
     (async () => {
-      await cancelAllReminders();
+      // Hủy tất cả thông báo cũ
+      await cancelAllScheduledNotifications();
+      
+      console.log(`Lập lịch thông báo cho ${data.length} loại thuốc`);
+      
+      // Lập lịch thông báo mới cho từng liều thuốc
       for (const med of data) {
         if (med.status === 'taken' || med.status === 'skipped' || !med.notificationEnabled) continue;
         
@@ -178,11 +183,28 @@ export default function HomeScreen({ navigation, route, onLogout }) {
 
   const grouped = useMemo(() => {
     const m = new Map();
+    
+    // Remove duplicates: same prescriptionId and time
+    const uniqueMeds = [];
+    const seen = new Set();
+    
     data.forEach((med) => {
+      const key = `${med.prescriptionId}-${med.time}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueMeds.push(med);
+      } else {
+        console.log(`Skipping duplicate medication: ${med.name} at ${med.time}`);
+      }
+    });
+    
+    // Group by time
+    uniqueMeds.forEach((med) => {
       const arr = m.get(med.time) || [];
       arr.push(med);
       m.set(med.time, arr);
     });
+    
     return Array.from(m.entries()).sort(([a],[b]) => a.localeCompare(b));
   }, [data]);
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import RootNavigator from './src/navigation/RootNavigator';
+import MainNavigator from './src/navigation/MainNavigator';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import { Colors } from './src/theme/colors';
 import { isLoggedIn } from './src/services/auth';
@@ -106,7 +106,7 @@ export default function App() {
       <View style={{ flex: 1 }}>
         <StatusBar style="light" />
         {isAuthenticated ? (
-          <RootNavigator onLogout={handleLogout} />
+          <MainNavigator onLogout={handleLogout} />
         ) : (
           <AuthNavigator onLoginSuccess={handleLoginSuccess} />
         )}

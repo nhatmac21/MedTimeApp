@@ -58,7 +58,7 @@ const getTypeCategory = (type) => {
 // Fetch medicines from backend
 export async function fetchMedicinesFromBackend(pageNumber = 1, pageSize = 50) {
   try {
-    const result = await apiRequest(`/medicine?pageNumber=${pageNumber}&pageSize=${pageSize}`);
+    const result = await apiRequest(`/medicine?PageNumber=${pageNumber}&PageSize=${pageSize}`);
     
     if (result.success) {
       return {

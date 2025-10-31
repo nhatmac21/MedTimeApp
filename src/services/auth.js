@@ -382,6 +382,23 @@ export const getPrescriptionSchedules = async (pageNumber = 1, pageSize = 20) =>
   }
 };
 
+export const createPrescriptionSchedule = async (scheduleData) => {
+  try {
+    const result = await apiRequest('/prescriptionschedule', {
+      method: 'POST',
+      body: JSON.stringify(scheduleData),
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể tạo lịch trình' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
 export const updatePrescriptionSchedule = async (scheduleId, scheduleData) => {
   try {
     console.log('=== API UPDATE PRESCRIPTION SCHEDULE ===');

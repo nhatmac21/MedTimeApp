@@ -15,14 +15,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { logoutUser, getCurrentUser, linkGuardian, getGuardianLinks } from '../services/auth';
 import SettingsScreen from './SettingsScreen';
+import { useNavigation } from '@react-navigation/native';
 
 export default function CaregiverScreen({ onLogout }) {
+  const navigation = useNavigation();
   const [currentView, setCurrentView] = useState('tab'); // 'tab', 'monitoring', 'enterCode'
   const [searchCode, setSearchCode] = useState('');
   const [userInfo, setUserInfo] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [guardianLinks, setGuardianLinks] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
 
   useEffect(() => {
     loadUserInfo();
@@ -33,6 +36,7 @@ export default function CaregiverScreen({ onLogout }) {
     const user = await getCurrentUser();
     if (user) {
       setUserInfo(user);
+      setIsPremium(user.isPremium || false);
     }
   };
 
@@ -159,7 +163,9 @@ export default function CaregiverScreen({ onLogout }) {
               </View>
               <View style={styles.cardText}>
                 <Text style={styles.cardTitle}>Giám hộ của bạn</Text>
+                <Text style={styles.cardSubtitle}>Người giám sát bạn</Text>
               </View>
+              <Ionicons name="chevron-forward" size={24} color={Colors.textMuted} />
             </View>
           </TouchableOpacity>
 
@@ -169,14 +175,51 @@ export default function CaregiverScreen({ onLogout }) {
             onPress={() => setCurrentView('monitoring')}
           >
             <View style={styles.cardContent}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="people-outline" size={28} color={Colors.primary} />
+              </View>
               <View style={styles.cardText}>
                 <Text style={styles.cardTitle}>Giám sát</Text>
+                <Text style={styles.cardSubtitle}>Người bạn giám sát</Text>
               </View>
-              <View style={styles.iconContainer}>
-                <Ionicons name="eye-outline" size={28} color={Colors.primary} />
-              </View>
+              <Ionicons name="chevron-forward" size={24} color={Colors.textMuted} />
             </View>
           </TouchableOpacity>
+
+          {/* Nâng cấp Premium (chỉ hiện khi chưa premium) */}
+          {!isPremium && (
+            <TouchableOpacity 
+              style={[styles.card, styles.premiumCard]}
+              onPress={() => navigation.navigate('Premium')}
+            >
+              <View style={styles.cardContent}>
+                <View style={[styles.iconContainer, styles.premiumIconContainer]}>
+                  <Ionicons name="star" size={28} color={Colors.accent} />
+                </View>
+                <View style={styles.cardText}>
+                  <Text style={[styles.cardTitle, styles.premiumTitle]}>Nâng cấp Premium</Text>
+                  <Text style={styles.cardSubtitle}>Mở khóa tất cả tính năng cao cấp</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color={Colors.accent} />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Lịch sử thanh toán (chỉ hiện khi đã premium) */}
+          {isPremium && (
+            <TouchableOpacity style={styles.card}>
+              <View style={styles.cardContent}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="receipt-outline" size={28} color={Colors.primary} />
+                </View>
+                <View style={styles.cardText}>
+                  <Text style={styles.cardTitle}>Lịch sử thanh toán</Text>
+                  <Text style={styles.cardSubtitle}>Xem giao dịch đã thực hiện</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color={Colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+          )}
 
         </View>
       </ScrollView>
@@ -395,23 +438,90 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 100, // Space for FAB
   },
+  // User Info Card
+  userInfoCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  premiumStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  premiumText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.accent,
+    marginLeft: 4,
+  },
+  freeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textMuted,
+    marginLeft: 4,
+  },
+  upgradeButton: {
+    backgroundColor: Colors.accent,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  upgradeButtonText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  // Premium Features Card
+  premiumFeaturesCard: {
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+    borderRadius: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+    elevation: 2,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
   card: {
     backgroundColor: Colors.white,
-    borderRadius: 20,
-    marginBottom: 20,
-    elevation: 8,
+    borderRadius: 16,
+    marginBottom: 16,
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 2,
     },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: 4,
   },
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 25,
+    padding: 20,
   },
   iconContainer: {
     width: 60,
@@ -420,7 +530,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 20,
+    marginRight: 16,
   },
   cardText: {
     flex: 1,
@@ -658,5 +768,16 @@ const styles = StyleSheet.create({
   refreshButton: {
     padding: 8,
     marginRight: 8,
+  },
+  premiumCard: {
+    borderWidth: 2,
+    borderColor: Colors.accent,
+    backgroundColor: '#FFF9E6',
+  },
+  premiumIconContainer: {
+    backgroundColor: '#FFF3CD',
+  },
+  premiumTitle: {
+    color: Colors.accent,
   },
 });

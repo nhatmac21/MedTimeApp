@@ -40,7 +40,7 @@ export default function RootNavigator({ onLogout }) {
         <Tab.Screen name="Tìm" component={SearchScreen} />
         <Tab.Screen 
           name="Giám hộ" 
-          children={() => <CaregiverScreen onLogout={onLogout} />} 
+          children={({ navigation }) => <CaregiverScreen onLogout={onLogout} navigation={navigation} />} 
         />
       </Tab.Navigator>
   );

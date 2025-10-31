@@ -2,6 +2,29 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'medtime_medications';
 
+// Hàm tiện ích chung để lưu trữ dữ liệu
+export async function storeData(key, value) {
+  try {
+    const jsonValue = JSON.stringify(value);
+    await AsyncStorage.setItem(key, jsonValue);
+    return true;
+  } catch (error) {
+    console.error(`Lỗi khi lưu dữ liệu với khóa ${key}:`, error);
+    return false;
+  }
+}
+
+// Hàm tiện ích chung để đọc dữ liệu
+export async function getData(key) {
+  try {
+    const jsonValue = await AsyncStorage.getItem(key);
+    return jsonValue != null ? JSON.parse(jsonValue) : null;
+  } catch (error) {
+    console.error(`Lỗi khi đọc dữ liệu với khóa ${key}:`, error);
+    return null;
+  }
+}
+
 export async function saveMedications(medications) {
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(medications));
