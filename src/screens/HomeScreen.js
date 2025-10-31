@@ -7,7 +7,11 @@ import SectionHeader from '../components/SectionHeader';
 import MedicationCard from '../components/MedicationCard';
 import useClock from '../hooks/useClock';
 import { fetchMedicationsForDate, markDose } from '../services/medicationsApi';
-import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
+import { 
+  scheduleLocalNotification,
+  buildDateFromTime,
+  cancelAllScheduledNotifications 
+} from '../services/localNotifications';
 import { deleteMedicationByNameAndTime } from '../services/storage';
 
 export default function HomeScreen({ navigation, route }) {
@@ -63,18 +67,31 @@ export default function HomeScreen({ navigation, route }) {
   // Lên lịch thông báo cho các liều chưa uống
   useEffect(() => {
     (async () => {
-      await cancelAllReminders();
+      // Hủy tất cả thông báo cũ
+      await cancelAllScheduledNotifications();
+      
+      console.log(`Lập lịch thông báo cho ${data.length} loại thuốc`);
+      
+      // Lập lịch thông báo mới cho từng liều thuốc
       for (const med of data) {
         for (const t of med.times) {
+          // Bỏ qua các liều đã uống hoặc đã bỏ qua
           if (t.status === 'taken' || t.status === 'skipped') continue;
+          
+          // Tính thời gian cần thông báo
           const triggerDate = buildDateFromTime(date.toDate(), t.time);
           const inFuture = triggerDate.getTime() > Date.now();
+          
+          // Chỉ lập lịch cho thời gian trong tương lai
           if (inFuture) {
-            await scheduleReminder({
+            const result = await scheduleLocalNotification({
               title: `Nhắc uống: ${med.name}`,
               body: `${med.dosage}, uống ${t.quantity} viên lúc ${t.time}`,
-              date: triggerDate,
+              data: { medicationId: med.id, time: t.time },
+              trigger: triggerDate,
             });
+            
+            console.log(`Lập lịch thông báo cho ${med.name} lúc ${t.time}: ${result.success ? 'thành công' : 'thất bại'}`);
           }
         }
       }

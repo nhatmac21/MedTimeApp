@@ -225,11 +225,16 @@ export default function EditorScreen({ navigation }) {
 
   const handlePremiumUpgrade = () => {
     setShowPremiumModal(false);
-    Alert.alert(
-      'Nâng cấp Premium',
-      'Tính năng nâng cấp Premium sẽ được phát triển trong phiên bản tiếp theo.',
-      [{ text: 'OK' }]
-    );
+    if (navigation) {
+      // Navigate to Premium screen
+      navigation.navigate('Premium');
+    } else {
+      Alert.alert(
+        'Nâng cấp Premium',
+        'Tính năng nâng cấp Premium sẽ được phát triển trong phiên bản tiếp theo.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handlePremiumCancel = () => {

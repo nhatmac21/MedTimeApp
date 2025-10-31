@@ -1,20 +1,30 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { arePushNotificationsAvailable, showPushNotificationWarning, createMockPushNotificationAPI } from '../utils/pushNotificationUtils';
 
 // Import notifications with error handling
 let Notifications = null;
 try {
-  Notifications = require('expo-notifications');
-  
-  // Only set handler if notifications are available
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
+  // Check if push notifications are available
+  if (arePushNotificationsAvailable()) {
+    Notifications = require('expo-notifications');
+    
+    // Only set handler if notifications are available
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+  } else {
+    showPushNotificationWarning();
+    // Create mock API to prevent crashes
+    Notifications = createMockPushNotificationAPI();
+  }
 } catch (error) {
   // Silently handle if notifications not available
+  console.log('Error initializing notifications:', error);
 }
 
 export async function requestPermissions() {
@@ -22,10 +32,10 @@ export async function requestPermissions() {
   
   try {
     const { status } = await Notifications.requestPermissionsAsync();
-    if (Platform.OS === 'android') {
+    if (Platform.OS === 'android' && Notifications.setNotificationChannelAsync) {
       await Notifications.setNotificationChannelAsync('reminders', {
         name: 'Nhắc uống thuốc',
-        importance: Notifications.AndroidImportance.HIGH,
+        importance: 4, // HIGH importance
       });
     }
     return status === 'granted';

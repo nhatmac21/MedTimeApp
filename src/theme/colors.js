@@ -12,4 +12,8 @@ export const Colors = {
   danger: '#E86C6C',
   accent: '#FFC107', // Vàng cho premium features
   white: '#FFFFFF',
+  // Màu thông báo cảnh báo
+  warning: '#F39C12',
+  warningBackground: '#FEF5E7',
+  warningText: '#7D5109',
 };
