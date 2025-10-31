@@ -183,7 +183,7 @@ export default function RegisterScreen({ navigation }) {
             disabled={loading}
           >
             <LinearGradient
-              colors={[Colors.accent, '#ff6b6b']}
+              colors={[Colors.primary, Colors.primaryDark]}
               style={styles.registerButtonGradient}
             >
               <Text style={styles.registerButtonText}>

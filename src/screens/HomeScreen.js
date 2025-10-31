@@ -1,36 +1,133 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Text } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, Text, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import Dayjs from 'dayjs';
 import { Colors } from '../theme/colors';
 import DayCarousel from '../components/DayCarousel';
 import SectionHeader from '../components/SectionHeader';
 import MedicationCard from '../components/MedicationCard';
 import useClock from '../hooks/useClock';
-import { fetchMedicationsForDate, markDose } from '../services/medicationsApi';
-import { 
-  scheduleLocalNotification,
-  buildDateFromTime,
-  cancelAllScheduledNotifications 
-} from '../services/localNotifications';
-import { deleteMedicationByNameAndTime } from '../services/storage';
+import { getPrescriptions, getPrescriptionSchedules, getMedicines } from '../services/auth';
+import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
+import SettingsScreen from './SettingsScreen';
 
-export default function HomeScreen({ navigation, route }) {
+
+export default function HomeScreen({ navigation, route, onLogout }) {
   const now = useClock(1000);
   const [date, setDate] = useState(Dayjs());
   const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [medicines, setMedicines] = useState({});
+  const [showSettings, setShowSettings] = useState(false);
 
   const loadMedicationsForDate = async (selectedDate, showRefreshIndicator = false) => {
     try {
       if (showRefreshIndicator) {
         setIsRefreshing(true);
+      } else {
+        setLoading(true);
       }
-      const medications = await fetchMedicationsForDate(selectedDate.format('YYYY-MM-DD'));
+
+      // Load medicines for name mapping
+      const medicinesResult = await getMedicines(1, 100);
+      const medicineMap = {};
+      if (medicinesResult.success) {
+        medicinesResult.data.items.forEach(med => {
+          medicineMap[med.medicineid] = med.name;
+        });
+        setMedicines(medicineMap);
+        console.log('Medicine map loaded:', medicineMap);
+      }
+
+      // Load prescriptions (load more items for HomeScreen to filter by date)
+      const prescriptionsResult = await getPrescriptions(1, 100);
+      console.log('Prescriptions result:', prescriptionsResult);
+      
+      if (!prescriptionsResult || !prescriptionsResult.success || !prescriptionsResult.data || !prescriptionsResult.data.items || prescriptionsResult.data.items.length === 0) {
+        console.log('No prescriptions found');
+        setData([]);
+        setLoading(false);
+        if (showRefreshIndicator) setIsRefreshing(false);
+        return;
+      }
+
+      const prescriptions = prescriptionsResult.data.items;
+      console.log('Prescriptions array:', prescriptions);
+
+      // Load prescription schedules (load more items for HomeScreen to filter by date)
+      const schedulesResult = await getPrescriptionSchedules(1, 100);
+      console.log('Schedules result:', schedulesResult);
+      
+      if (!schedulesResult || !schedulesResult.success || !schedulesResult.data || !schedulesResult.data.items) {
+        console.log('No schedules found');
+        setData([]);
+        setLoading(false);
+        if (showRefreshIndicator) setIsRefreshing(false);
+        return;
+      }
+
+      // Filter prescriptions for selected date
+      const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+      console.log('Selected date:', selectedDateStr);
+      
+      const activePrescriptions = prescriptions.filter(p => {
+        const isActive = p.startdate <= selectedDateStr && p.enddate >= selectedDateStr;
+        console.log(`Prescription ${p.prescriptionid}: ${p.startdate} to ${p.enddate}, active: ${isActive}`);
+        return isActive;
+      });
+
+      console.log(`Active prescriptions: ${activePrescriptions.length}`);
+
+      // Combine prescriptions with schedules
+      const medications = [];
+      
+      activePrescriptions.forEach(prescription => {
+        const prescriptionSchedules = schedulesResult.data.items.filter(
+          s => s.prescriptionid === prescription.prescriptionid
+        );
+
+        console.log(`Prescription ${prescription.prescriptionid} has ${prescriptionSchedules.length} schedules`);
+
+        prescriptionSchedules.forEach(schedule => {
+          // Check if schedule should be displayed today based on repeatPattern
+          let shouldDisplay = true;
+          
+          if (schedule.repeatPattern === 'WEEKLY' && schedule.dayOfWeek) {
+            const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+            const selectedDay = dayNames[selectedDate.day()];
+            shouldDisplay = schedule.dayOfWeek.toUpperCase() === selectedDay;
+            console.log(`Weekly schedule: ${schedule.dayOfWeek} vs ${selectedDay}, display: ${shouldDisplay}`);
+          } else if (schedule.repeatPattern === 'MONTHLY' && schedule.dayofmonth) {
+            const selectedDayOfMonth = selectedDate.date();
+            shouldDisplay = schedule.dayofmonth === selectedDayOfMonth;
+            console.log(`Monthly schedule: ${schedule.dayofmonth} vs ${selectedDayOfMonth}, display: ${shouldDisplay}`);
+          }
+          // DAILY schedules always display
+
+          if (shouldDisplay) {
+            medications.push({
+              id: `${prescription.prescriptionid}-${schedule.scheduleid}`,
+              prescriptionId: prescription.prescriptionid,
+              scheduleId: schedule.scheduleid,
+              name: medicineMap[prescription.medicineid] || `Thuốc ID: ${prescription.medicineid}`,
+              dosage: prescription.dosage,
+              notes: prescription.notes,
+              time: schedule.timeofday ? schedule.timeofday.substring(0, 5) : '08:00', // HH:mm format
+              status: 'pending', // Default status, can be updated later
+              notificationEnabled: schedule.notificationenabled
+            });
+          }
+        });
+      });
+
       setData(medications);
-      console.log(`Loaded ${medications.length} medications for ${selectedDate.format('YYYY-MM-DD')}`);
+      console.log(`Loaded ${medications.length} medications for ${selectedDateStr}`);
     } catch (error) {
       console.error('Error loading medications:', error);
+      Alert.alert('Lỗi', 'Không thể tải danh sách thuốc');
     } finally {
+      setLoading(false);
       if (showRefreshIndicator) {
         setIsRefreshing(false);
       }
@@ -40,6 +137,14 @@ export default function HomeScreen({ navigation, route }) {
   useEffect(() => {
     loadMedicationsForDate(date);
   }, [date]);
+
+  // Reload data when screen comes into focus (e.g., after login)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('HomeScreen: Screen focused, reloading data');
+      loadMedicationsForDate(date);
+    }, [date])
+  );
 
   // Listen for navigation params to reload data
   useEffect(() => {
@@ -51,19 +156,6 @@ export default function HomeScreen({ navigation, route }) {
     }
   }, [route.params?.shouldReload, date, navigation]);
 
-  // Also reload when screen comes into focus (but only if no shouldReload param)
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // Only reload on focus if not already reloading due to shouldReload
-      if (!route.params?.shouldReload) {
-        console.log('HomeScreen: Reloading data due to focus');
-        loadMedicationsForDate(date);
-      }
-    });
-
-    return unsubscribe;
-  }, [navigation, date, route.params?.shouldReload]);
-
   // Lên lịch thông báo cho các liều chưa uống
   useEffect(() => {
     (async () => {
@@ -74,25 +166,16 @@ export default function HomeScreen({ navigation, route }) {
       
       // Lập lịch thông báo mới cho từng liều thuốc
       for (const med of data) {
-        for (const t of med.times) {
-          // Bỏ qua các liều đã uống hoặc đã bỏ qua
-          if (t.status === 'taken' || t.status === 'skipped') continue;
-          
-          // Tính thời gian cần thông báo
-          const triggerDate = buildDateFromTime(date.toDate(), t.time);
-          const inFuture = triggerDate.getTime() > Date.now();
-          
-          // Chỉ lập lịch cho thời gian trong tương lai
-          if (inFuture) {
-            const result = await scheduleLocalNotification({
-              title: `Nhắc uống: ${med.name}`,
-              body: `${med.dosage}, uống ${t.quantity} viên lúc ${t.time}`,
-              data: { medicationId: med.id, time: t.time },
-              trigger: triggerDate,
-            });
-            
-            console.log(`Lập lịch thông báo cho ${med.name} lúc ${t.time}: ${result.success ? 'thành công' : 'thất bại'}`);
-          }
+        if (med.status === 'taken' || med.status === 'skipped' || !med.notificationEnabled) continue;
+        
+        const triggerDate = buildDateFromTime(date.toDate(), med.time);
+        const inFuture = triggerDate.getTime() > Date.now();
+        if (inFuture) {
+          await scheduleReminder({
+            title: `Nhắc uống: ${med.name}`,
+            body: `${med.dosage}${med.notes ? `, ${med.notes}` : ''}`,
+            date: triggerDate,
+          });
         }
       }
     })();
@@ -101,85 +184,122 @@ export default function HomeScreen({ navigation, route }) {
   const grouped = useMemo(() => {
     const m = new Map();
     data.forEach((med) => {
-      med.times.forEach((t) => {
-        const arr = m.get(t.time) || [];
-        arr.push({ med, t });
-        m.set(t.time, arr);
-      });
+      const arr = m.get(med.time) || [];
+      arr.push(med);
+      m.set(med.time, arr);
     });
     return Array.from(m.entries()).sort(([a],[b]) => a.localeCompare(b));
   }, [data]);
 
-  const handleDeleteMedication = async (medName, time) => {
-    Alert.alert(
-      'Xóa thuốc',
-      `Bạn có chắc muốn xóa "${medName}" lúc ${time}?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa', 
-          style: 'destructive',
-          onPress: async () => {
-            const result = await deleteMedicationByNameAndTime(medName, time);
-            if (result.success) {
-              // Reload data with refresh indicator
-              await loadMedicationsForDate(date, true);
-            } else {
-              Alert.alert('Lỗi', 'Không thể xóa thuốc');
-            }
-          }
-        }
-      ]
+  const handleMarkTaken = (medication) => {
+    setData((prev) =>
+      prev.map((med) =>
+        med.id === medication.id
+          ? { ...med, status: 'taken', takenAt: now.format('H:mm') }
+          : med
+      )
     );
   };
 
-  return (
-    <View style={styles.container}>
-      <DayCarousel date={date} onSelect={setDate} />
-      {isRefreshing && (
-        <View style={styles.refreshIndicator}>
-          <Text style={styles.refreshText}>🔄 Đang cập nhật danh sách thuốc...</Text>
+  const handleMarkSkipped = (medication) => {
+    setData((prev) =>
+      prev.map((med) =>
+        med.id === medication.id
+          ? { ...med, status: 'skipped' }
+          : med
+      )
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <DayCarousel date={date} onSelect={setDate} onSettingsPress={() => setShowSettings(true)} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Đang tải danh sách thuốc...</Text>
         </View>
-      )}
-      <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 30 }}>
-        {grouped.map(([time, items]) => (
-          <View key={time}>
-            <SectionHeader title={time} />
-            {items.map(({ med, t }) => (
-              <MedicationCard
-                key={med.id + time}
-                name={med.name}
-                dosage={med.dosage}
-                quantity={t.quantity}
-                status={t.status || 'pending'}
-                takenInfo={
-                  t.status === 'taken'
-                    ? `Đã uống lúc ${t.takenAt}${t.repeats ? `, sau ${t.repeats} lần nhắc` : ''}`
-                    : t.status === 'skipped'
-                    ? t.note || `Bỏ qua lúc ${time}`
-                    : ''
-                }
-                onTake={async () => {
-                  await markDose({ medId: med.id, time, status: 'taken', takenAt: now.format('H:mm') });
-                  setData((prev) => prev.map((mm) => mm.id === med.id ? { ...mm, times: mm.times.map((tt) => tt.time === time ? { ...tt, status: 'taken', takenAt: now.format('H:mm') } : tt) } : mm));
-                }}
-                onSkip={async () => {
-                  await markDose({ medId: med.id, time, status: 'skipped' });
-                  setData((prev) => prev.map((mm) => mm.id === med.id ? { ...mm, times: mm.times.map((tt) => tt.time === time ? { ...tt, status: 'skipped' } : tt) } : mm));
-                }}
-                onDelete={() => handleDeleteMedication(med.name, time)}
-              />)
-            )}
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <View style={styles.container}>
+        <DayCarousel date={date} onSelect={setDate} onSettingsPress={() => setShowSettings(true)} />
+        {isRefreshing && (
+          <View style={styles.refreshIndicator}>
+            <Text style={styles.refreshText}>🔄 Đang cập nhật danh sách thuốc...</Text>
           </View>
-        ))}
-      </ScrollView>
-    </View>
+        )}
+        <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 30 }}>
+          {grouped.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>Không có thuốc nào trong ngày này</Text>
+            </View>
+          ) : (
+            grouped.map(([time, medications]) => (
+              <View key={time}>
+                <SectionHeader title={time} />
+                {medications.map((med) => (
+                  <MedicationCard
+                    key={med.id}
+                    name={med.name}
+                    dosage={med.dosage}
+                    quantity={med.notes || ''}
+                    status={med.status}
+                    takenInfo={
+                      med.status === 'taken'
+                        ? `Đã uống lúc ${med.takenAt}`
+                        : med.status === 'skipped'
+                        ? `Bỏ qua lúc ${time}`
+                        : ''
+                    }
+                    onTake={() => handleMarkTaken(med)}
+                    onSkip={() => handleMarkSkipped(med)}
+                    onDelete={null} // Disable delete for now, can be added later
+                  />
+                ))}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </View>
+      
+      <SettingsScreen
+        visible={showSettings}
+        onClose={() => setShowSettings(false)}
+        onLogout={onLogout}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   scroll: { flex: 1 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.textMuted,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
   refreshIndicator: {
     backgroundColor: Colors.primary,
     paddingVertical: 8,

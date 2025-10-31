@@ -16,8 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import MedicationPicker from '../components/MedicationPicker';
 import TimePicker from '../components/TimePicker';
-import { addMedication, getAllMedications } from '../services/storage';
-import { scheduleReminder, buildDateFromTime } from '../services/notifications';
+import { createPrescription, createPrescriptionSchedule, getPrescriptions } from '../services/auth';
+import { scheduleLocalNotification, buildDateFromTime } from '../services/localNotifications';
 import dayjs from 'dayjs';
 
 export default function EditorScreen({ navigation }) {
@@ -29,8 +29,10 @@ export default function EditorScreen({ navigation }) {
 
   const loadMedicationCount = async () => {
     try {
-      const medications = await getAllMedications();
-      setMedicationCount(medications.length);
+      const result = await getPrescriptions(1, 100);
+      if (result.success && result.data?.items) {
+        setMedicationCount(result.data.items.length);
+      }
     } catch (error) {
       console.log('Error loading medication count:', error);
     }
@@ -161,36 +163,77 @@ export default function EditorScreen({ navigation }) {
       const validTimes = times.filter(t => t.trim());
       const validMeds = selectedMeds.filter(item => item.med && item.dosage.trim() && item.quantity.trim());
       
-      // Save each medication separately
+      console.log('=== SAVING PRESCRIPTIONS ===');
+      console.log('Valid meds:', validMeds.length);
+      console.log('Valid times:', validTimes);
+      
+      // Save each medication to backend
       let savedCount = 0;
       for (const medItem of validMeds) {
-        const medication = {
-          name: medItem.med.name,
+        console.log('Creating prescription for:', medItem.med.name);
+        
+        // Calculate start and end dates
+        const startDate = dayjs().format('YYYY-MM-DD');
+        const endDate = dayjs().add(30, 'day').format('YYYY-MM-DD'); // Default 30 days
+        
+        // Create prescription via backend API
+        const prescriptionData = {
+          medicineid: parseInt(medItem.med.id),
           dosage: medItem.dosage.trim(),
-          times: validTimes.map(time => ({
-            time,
-            quantity: parseInt(medItem.quantity),
-            status: 'pending'
-          }))
+          frequencyperday: validTimes.length,
+          startdate: startDate,
+          enddate: endDate,
+          remainingquantity: parseInt(medItem.quantity) * validTimes.length * 30, // quantity per dose * times per day * 30 days
+          notes: medItem.med.notes || ''
         };
-
-        const result = await addMedication(medication);
+        
+        console.log('Prescription data:', prescriptionData);
+        
+        const result = await createPrescription(prescriptionData);
+        console.log('Create result:', result);
+        
         if (result.success) {
-          savedCount++;
-          // Lên lịch thông báo cho từng mốc giờ
+          const prescriptionId = result.data.prescriptionid;
+          console.log('✅ Prescription created with ID:', prescriptionId);
+          
+          // Create schedules for each time slot
           for (const timeSlot of validTimes) {
-            const today = dayjs();
-            const notificationDate = buildDateFromTime(today.toDate(), timeSlot);
+            const scheduleData = {
+              prescriptionid: prescriptionId,
+              timeofday: `${timeSlot}:00`, // Backend expects HH:mm:ss
+              interval: 1,
+              repeatPattern: 'DAILY',
+              notificationenabled: true
+            };
             
-            // Chỉ đặt thông báo cho tương lai
-            if (notificationDate.getTime() > Date.now()) {
-              await scheduleReminder({
-                title: `Nhắc uống: ${medItem.med.name}`,
-                body: `${medItem.dosage.trim()}, uống ${medItem.quantity} viên lúc ${timeSlot}`,
-                date: notificationDate,
-              });
+            console.log('Creating schedule:', scheduleData);
+            const scheduleResult = await createPrescriptionSchedule(scheduleData);
+            
+            if (scheduleResult.success) {
+              console.log('✅ Schedule created successfully');
+              
+              // Schedule local notification
+              const today = dayjs();
+              const notificationDate = buildDateFromTime(today.toDate(), timeSlot);
+              
+              // Only schedule for future times
+              if (notificationDate.getTime() > Date.now()) {
+                await scheduleLocalNotification({
+                  title: `Nhắc uống: ${medItem.med.name}`,
+                  body: `${medItem.dosage.trim()}, uống ${medItem.quantity} viên lúc ${timeSlot}`,
+                  data: { medicineId: medItem.med.id, time: timeSlot },
+                  trigger: notificationDate,
+                });
+              }
+            } else {
+              console.error('❌ Failed to create schedule:', scheduleResult.error);
             }
           }
+          
+          savedCount++;
+        } else {
+          console.error('❌ Failed to create prescription:', result.error);
+          throw new Error(result.error || 'Không thể tạo nhắc nhở');
         }
       }
 
@@ -202,8 +245,7 @@ export default function EditorScreen({ navigation }) {
             text: 'OK', 
             onPress: () => {
               resetForm();
-              loadMedicationCount(); // Refresh count
-              // Navigate back to Home and trigger reload
+              loadMedicationCount();
               navigation.navigate('Trang chủ', { shouldReload: true });
             }
           }]
@@ -212,6 +254,7 @@ export default function EditorScreen({ navigation }) {
         throw new Error('Không thể lưu thuốc nào');
       }
     } catch (error) {
+      console.error('Save error:', error);
       Alert.alert('⚠️ Có lỗi xảy ra', error.message || 'Không thể lưu thuốc. Vui lòng thử lại!');
     } finally {
       setLoading(false);

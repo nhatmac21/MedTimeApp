@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
-import EditorScreen from '../screens/EditorScreen';
+import EditorStackNavigator from './EditorStackNavigator';
 import SearchScreen from '../screens/SearchScreen';
 import CaregiverScreen from '../screens/CaregiverScreen';
 import { Colors } from '../theme/colors';
@@ -32,8 +32,11 @@ export default function RootNavigator({ onLogout }) {
           },
         })}
       >
-        <Tab.Screen name="Trang chủ" component={HomeScreen} />
-        <Tab.Screen name="Thêm" component={EditorScreen} />
+        <Tab.Screen 
+          name="Trang chủ" 
+          children={(props) => <HomeScreen {...props} onLogout={onLogout} />} 
+        />
+        <Tab.Screen name="Thêm" component={EditorStackNavigator} />
         <Tab.Screen name="Tìm" component={SearchScreen} />
         <Tab.Screen 
           name="Giám hộ" 

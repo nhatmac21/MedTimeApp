@@ -18,12 +18,13 @@ export default function MedicationCard({
 }) {
   const isTaken = status === 'taken';
   const isSkipped = status === 'skipped';
-  const actionBg = isSkipped ? Colors.danger : Colors.success;
+  const isPending = status === 'pending';
+  
   return (
     <View style={[styles.wrapper, isSkipped && styles.wrapperAlt]}>
       <View style={styles.left}>
         <Text style={styles.title}>{name}</Text>
-        <Text style={styles.sub}>{dosage}, uống {quantity} viên</Text>
+        <Text style={styles.sub}>{dosage}{quantity ? `, ${quantity}` : ''}</Text>
         {!!takenInfo && <Text style={styles.note}>{takenInfo}</Text>}
       </View>
       <View style={styles.actionGroup}>
@@ -36,14 +37,39 @@ export default function MedicationCard({
             <Ionicons name="close" size={32} color={Colors.white} />
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          accessibilityRole="button"
-          style={[styles.action, { backgroundColor: actionBg }, (isTaken || isSkipped) && styles.actionDisabled]}
-          onPress={() => (isTaken ? onSkip?.() : onTake?.())}
-          disabled={isTaken || isSkipped}
-        >
-          {isTaken ? <Check /> : isSkipped ? <Cross /> : <Check />}
-        </TouchableOpacity>
+        
+        {/* Show two buttons for pending status */}
+        {isPending ? (
+          <>
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={[styles.action, { backgroundColor: Colors.danger }]}
+              onPress={onSkip}
+            >
+              <Cross />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={[styles.action, { backgroundColor: Colors.primary }]}
+              onPress={onTake}
+            >
+              <Check />
+            </TouchableOpacity>
+          </>
+        ) : (
+          /* Show single button for taken/skipped status */
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={[
+              styles.action, 
+              { backgroundColor: isSkipped ? Colors.danger : Colors.primary },
+              styles.actionDisabled
+            ]}
+            disabled
+          >
+            {isTaken ? <Check /> : <Cross />}
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
