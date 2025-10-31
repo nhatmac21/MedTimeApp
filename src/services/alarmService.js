@@ -1,18 +1,64 @@
-import { AudioPlayer } from 'expo-audio';
+import { Audio } from 'expo-av';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SOUND_ENABLED_KEY = '@medtime_sound_enabled';
+const ALARM_STORAGE_KEY = '@alarm_settings';
 
-let currentPlayer = null;
+let currentAlarmSound = null;
+
+const ALARM_SOUNDS = {
+  alarm1: require('../../assets/sounds/alarm1.mp3'),
+  alarm2: require('../../assets/sounds/alarm2.mp3'),
+  alarm3: require('../../assets/sounds/alarm3.mp3'),
+};
 
 // Initialize audio settings
 export const initializeAudio = async () => {
   try {
-    // expo-audio doesn't require explicit initialization like expo-av
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+    });
     console.log('Audio system ready');
   } catch (error) {
     console.log('Error initializing audio:', error);
+  }
+};
+
+// Save alarm settings to storage
+export const saveAlarmSettings = async (medicationId, alarmSoundId) => {
+  try {
+    const settings = await getAlarmSettings();
+    settings[medicationId] = alarmSoundId;
+    await AsyncStorage.setItem(ALARM_STORAGE_KEY, JSON.stringify(settings));
+    console.log(`Saved alarm sound ${alarmSoundId} for medication ${medicationId}`);
+  } catch (error) {
+    console.error('Error saving alarm settings:', error);
+  }
+};
+
+// Get all alarm settings
+export const getAlarmSettings = async () => {
+  try {
+    const data = await AsyncStorage.getItem(ALARM_STORAGE_KEY);
+    return data ? JSON.parse(data) : {};
+  } catch (error) {
+    console.error('Error loading alarm settings:', error);
+    return {};
+  }
+};
+
+// Get alarm sound for specific medication
+export const getAlarmSoundForMedication = async (medicationId) => {
+  try {
+    const settings = await getAlarmSettings();
+    return settings[medicationId] || 'alarm1'; // Default to alarm1
+  } catch (error) {
+    console.error('Error getting alarm sound:', error);
+    return 'alarm1';
   }
 };
 
@@ -35,19 +81,91 @@ export const setSoundEnabled = async (enabled) => {
   }
 };
 
-// Play medication alarm sound
-export const playMedicationAlarm = async () => {
+// Play alarm sound
+export const playAlarmSound = async (alarmSoundId = 'alarm1') => {
   try {
     const soundEnabled = await isSoundEnabled();
     if (!soundEnabled) return;
 
-    // Stop current player if playing
-    if (currentPlayer) {
-      await currentPlayer.stop();
-      currentPlayer = null;
+    // Stop current sound if playing
+    if (currentAlarmSound) {
+      await stopAlarmSound();
     }
 
-    // Create and play new audio
+    // Configure audio mode for alarm
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+    });
+
+    // Load and play sound
+    const soundFile = ALARM_SOUNDS[alarmSoundId] || ALARM_SOUNDS.alarm1;
+    const { sound } = await Audio.Sound.createAsync(
+      soundFile,
+      { 
+        shouldPlay: true, 
+        isLooping: true, // Loop the alarm
+        volume: 1.0 
+      }
+    );
+
+    currentAlarmSound = sound;
+    console.log(`Playing alarm sound: ${alarmSoundId}`);
+    
+    return sound;
+  } catch (error) {
+    console.error('Error playing alarm sound:', error);
+    throw error;
+  }
+};
+
+// Stop alarm sound
+export const stopAlarmSound = async () => {
+  try {
+    if (currentAlarmSound) {
+      const soundToStop = currentAlarmSound;
+      currentAlarmSound = null; // Clear reference first to prevent re-entry
+      
+      try {
+        await soundToStop.stopAsync();
+      } catch (e) {
+        console.log('Error stopping sound:', e);
+      }
+      
+      try {
+        await soundToStop.unloadAsync();
+      } catch (e) {
+        console.log('Error unloading sound:', e);
+      }
+      
+      console.log('Alarm sound stopped');
+    }
+  } catch (error) {
+    console.error('Error stopping alarm sound:', error);
+  }
+};
+
+// Check if alarm is playing
+export const isAlarmPlaying = () => {
+  return currentAlarmSound !== null;
+};
+
+// Play alarm with medication data
+export const playAlarmForMedication = async (medicationId) => {
+  try {
+    const alarmSoundId = await getAlarmSoundForMedication(medicationId);
+    await playAlarmSound(alarmSoundId);
+  } catch (error) {
+    console.error('Error playing alarm for medication:', error);
+  }
+};
+
+// Legacy function for backward compatibility
+export const playMedicationAlarm = async () => {
+  try {
+    await playAlarmSound('alarm1');
     currentPlayer = new AudioPlayer(require('../../assets/sounds/alarm1.mp3'));
     await currentPlayer.play({
       loop: true,

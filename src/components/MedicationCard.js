@@ -38,16 +38,18 @@ export default function MedicationCard({
           </TouchableOpacity>
         )}
         
-        {/* Show two buttons for pending status */}
+        {/* Show buttons for pending status */}
         {isPending ? (
           <>
-            <TouchableOpacity
-              accessibilityRole="button"
-              style={[styles.action, { backgroundColor: Colors.danger }]}
-              onPress={onSkip}
-            >
-              <Cross />
-            </TouchableOpacity>
+            {onSkip && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={[styles.action, { backgroundColor: Colors.danger }]}
+                onPress={onSkip}
+              >
+                <Cross />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               accessibilityRole="button"
               style={[styles.action, { backgroundColor: Colors.primary }]}

@@ -17,7 +17,10 @@ import { Colors } from '../theme/colors';
 import MedicationPicker from '../components/MedicationPicker';
 import TimePicker from '../components/TimePicker';
 import DatePicker from '../components/DatePicker';
+import AlarmSoundPicker from '../components/AlarmSoundPicker';
+import RepeatPatternPicker from '../components/RepeatPatternPicker';
 import { createPrescription, createPrescriptionSchedule, getPrescriptions } from '../services/auth';
+import { saveAlarmSettings } from '../services/alarmService';
 import { scheduleLocalNotification, buildDateFromTime } from '../services/localNotifications';
 import dayjs from 'dayjs';
 
@@ -29,9 +32,16 @@ export default function EditorScreen({ navigation }) {
     notes: '',
     startDate: dayjs().format('YYYY-MM-DD'),
     endDate: dayjs().add(30, 'day').format('YYYY-MM-DD'),
-    doctorName: ''
+    doctorName: '',
+    alarmSound: 'alarm1'
   }]);
   const [times, setTimes] = useState(['']);
+  const [repeatPattern, setRepeatPattern] = useState({
+    pattern: 'DAILY',
+    interval: 1,
+    dayOfWeek: null,
+    dayOfMonth: null,
+  });
   const [loading, setLoading] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [medicationCount, setMedicationCount] = useState(0);
@@ -77,7 +87,8 @@ export default function EditorScreen({ navigation }) {
       notes: '',
       startDate: dayjs().format('YYYY-MM-DD'),
       endDate: dayjs().add(30, 'day').format('YYYY-MM-DD'),
-      doctorName: ''
+      doctorName: '',
+      alarmSound: 'alarm1'
     }]);
   };
 
@@ -248,8 +259,10 @@ export default function EditorScreen({ navigation }) {
             const scheduleData = {
               prescriptionid: prescriptionId,
               timeofday: `${timeSlot}:00`, // Backend expects HH:mm:ss
-              interval: 1,
-              repeatPattern: 'DAILY',
+              interval: repeatPattern.interval,
+              repeatPattern: repeatPattern.pattern,
+              dayOfWeek: repeatPattern.dayOfWeek,
+              dayofmonth: repeatPattern.dayOfMonth,
               notificationenabled: true
             };
             
@@ -258,6 +271,11 @@ export default function EditorScreen({ navigation }) {
             
             if (scheduleResult.success) {
               console.log('✅ Schedule created successfully');
+              
+              // Save alarm sound setting for this prescription
+              if (medItem.alarmSound) {
+                await saveAlarmSettings(prescriptionId, medItem.alarmSound);
+              }
               
               // Schedule local notification
               const today = dayjs();
@@ -268,7 +286,12 @@ export default function EditorScreen({ navigation }) {
                 await scheduleLocalNotification({
                   title: `Nhắc uống: ${medItem.med.name}`,
                   body: `${medItem.dosage.trim()}, uống ${medItem.quantity} viên lúc ${timeSlot}`,
-                  data: { medicineId: medItem.med.id, time: timeSlot },
+                  data: { 
+                    medicineId: medItem.med.id, 
+                    prescriptionId: prescriptionId,
+                    time: timeSlot,
+                    alarmSound: medItem.alarmSound
+                  },
                   trigger: notificationDate,
                 });
               }
@@ -316,9 +339,16 @@ export default function EditorScreen({ navigation }) {
       notes: '',
       startDate: dayjs().format('YYYY-MM-DD'),
       endDate: dayjs().add(30, 'day').format('YYYY-MM-DD'),
-      doctorName: ''
+      doctorName: '',
+      alarmSound: 'alarm1'
     }]);
     setTimes(['']);
+    setRepeatPattern({
+      pattern: 'DAILY',
+      interval: 1,
+      dayOfWeek: null,
+      dayOfMonth: null,
+    });
   };
 
   const handlePremiumUpgrade = () => {
@@ -530,6 +560,12 @@ export default function EditorScreen({ navigation }) {
                   />
                 </View>
 
+                {/* Alarm Sound Picker */}
+                <AlarmSoundPicker
+                  selectedSound={medItem.alarmSound}
+                  onSoundSelect={(sound) => updateMedication(index, 'alarmSound', sound.id)}
+                />
+
                 {medItem.med && (
                   <View style={styles.medicineDetails}>
                     <Text style={styles.medicineDetailText}>
@@ -565,6 +601,16 @@ export default function EditorScreen({ navigation }) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Mốc giờ nhắc nhở</Text>
+            
+            {/* Repeat Pattern Picker */}
+            <RepeatPatternPicker
+              selectedPattern={repeatPattern.pattern}
+              interval={repeatPattern.interval}
+              dayOfWeek={repeatPattern.dayOfWeek}
+              dayOfMonth={repeatPattern.dayOfMonth}
+              onPatternChange={(data) => setRepeatPattern(data)}
+            />
+            
             <Text style={styles.hintText}>Chọn tần suất để tự động tạo mốc giờ, sau đó có thể điều chỉnh từng mốc</Text>
             {times.map((time, index) => (
               <View key={index} style={styles.timeRow}>

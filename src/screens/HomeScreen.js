@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Text, ActivityIndicator } from 'react-native';
+import { getAlarmSoundForMedication } from '../services/alarmService';
 import { useFocusEffect } from '@react-navigation/native';
 import Dayjs from 'dayjs';
 import { Colors } from '../theme/colors';
 import DayCarousel from '../components/DayCarousel';
 import SectionHeader from '../components/SectionHeader';
 import MedicationCard from '../components/MedicationCard';
+import AlarmModal from '../components/AlarmModal';
 import useClock from '../hooks/useClock';
-import { getPrescriptions, getPrescriptionSchedules, getMedicines } from '../services/auth';
+import { getPrescriptions, getPrescriptionSchedules, getMedicines, deletePrescription } from '../services/auth';
 import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
 import SettingsScreen from './SettingsScreen';
 
@@ -20,6 +22,8 @@ export default function HomeScreen({ navigation, route, onLogout }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [medicines, setMedicines] = useState({});
   const [showSettings, setShowSettings] = useState(false);
+  const [alarmMedication, setAlarmMedication] = useState(null);
+  const [showAlarmModal, setShowAlarmModal] = useState(false);
 
   const loadMedicationsForDate = async (selectedDate, showRefreshIndicator = false) => {
     try {
@@ -82,14 +86,23 @@ export default function HomeScreen({ navigation, route, onLogout }) {
       // Combine prescriptions with schedules
       const medications = [];
       
-      activePrescriptions.forEach(prescription => {
+      for (const prescription of activePrescriptions) {
         const prescriptionSchedules = schedulesResult.data.items.filter(
           s => s.prescriptionid === prescription.prescriptionid
         );
 
         console.log(`Prescription ${prescription.prescriptionid} has ${prescriptionSchedules.length} schedules`);
 
-        prescriptionSchedules.forEach(schedule => {
+        // Get alarm sound for this prescription
+        const alarmSound = await getAlarmSoundForMedication(prescription.prescriptionid);
+
+        for (const schedule of prescriptionSchedules) {
+          // Skip schedules with null interval (default backend schedules)
+          if (schedule.interval === null || schedule.interval === undefined) {
+            console.log(`Skipping schedule ${schedule.scheduleid} with null interval`);
+            continue;
+          }
+
           // Check if schedule should be displayed today based on repeatPattern
           let shouldDisplay = true;
           
@@ -115,11 +128,12 @@ export default function HomeScreen({ navigation, route, onLogout }) {
               notes: prescription.notes,
               time: schedule.timeofday ? schedule.timeofday.substring(0, 5) : '08:00', // HH:mm format
               status: 'pending', // Default status, can be updated later
-              notificationEnabled: schedule.notificationenabled
+              notificationEnabled: schedule.notificationenabled,
+              alarmSound: alarmSound
             });
           }
-        });
-      });
+        }
+      }
 
       setData(medications);
       console.log(`Loaded ${medications.length} medications for ${selectedDateStr}`);
@@ -181,6 +195,28 @@ export default function HomeScreen({ navigation, route, onLogout }) {
     })();
   }, [data, date]);
 
+  // Check for alarms that need to trigger
+  useEffect(() => {
+    const checkAlarms = () => {
+      const currentTime = now.format('HH:mm');
+      
+      // Find medications that should alarm now
+      const alarmMeds = data.filter(med => 
+        med.time === currentTime && 
+        med.status === 'pending' &&
+        med.notificationEnabled
+      );
+
+      if (alarmMeds.length > 0 && !showAlarmModal) {
+        // Show alarm for first medication
+        setAlarmMedication(alarmMeds[0]);
+        setShowAlarmModal(true);
+      }
+    };
+
+    checkAlarms();
+  }, [now, data, showAlarmModal]);
+
   const grouped = useMemo(() => {
     const m = new Map();
     
@@ -228,6 +264,54 @@ export default function HomeScreen({ navigation, route, onLogout }) {
     );
   };
 
+  const handleDeleteMedication = (medication) => {
+    Alert.alert(
+      'Xóa nhắc nhở',
+      `Bạn có chắc chắn muốn xóa nhắc nhở "${medication.name}"?`,
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('Deleting prescription:', medication.prescriptionId);
+              const result = await deletePrescription(medication.prescriptionId);
+              
+              if (result.success) {
+                // Remove from local state
+                setData((prev) => prev.filter((med) => med.prescriptionId !== medication.prescriptionId));
+                
+                Alert.alert('Thành công', 'Đã xóa nhắc nhở thành công');
+                
+                // Reload data to ensure sync with backend
+                loadMedicationsForDate(date, true);
+              } else {
+                Alert.alert('Lỗi', result.error || 'Không thể xóa nhắc nhở');
+              }
+            } catch (error) {
+              console.error('Error deleting medication:', error);
+              Alert.alert('Lỗi', 'Có lỗi xảy ra khi xóa nhắc nhở');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAlarmDismiss = async () => {
+    // Stop alarm sound first
+    const { stopAlarmSound } = require('../services/alarmService');
+    await stopAlarmSound();
+    
+    // Close modal
+    setShowAlarmModal(false);
+    setAlarmMedication(null);
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -268,13 +352,11 @@ export default function HomeScreen({ navigation, route, onLogout }) {
                     takenInfo={
                       med.status === 'taken'
                         ? `Đã uống lúc ${med.takenAt}`
-                        : med.status === 'skipped'
-                        ? `Bỏ qua lúc ${time}`
                         : ''
                     }
                     onTake={() => handleMarkTaken(med)}
-                    onSkip={() => handleMarkSkipped(med)}
-                    onDelete={null} // Disable delete for now, can be added later
+                    onSkip={null}
+                    onDelete={() => handleDeleteMedication(med)}
                   />
                 ))}
               </View>
@@ -287,6 +369,12 @@ export default function HomeScreen({ navigation, route, onLogout }) {
         visible={showSettings}
         onClose={() => setShowSettings(false)}
         onLogout={onLogout}
+      />
+
+      <AlarmModal
+        visible={showAlarmModal}
+        medication={alarmMedication}
+        onDismiss={handleAlarmDismiss}
       />
     </>
   );
