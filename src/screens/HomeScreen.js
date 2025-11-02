@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Text, ActivityIndicator } from 'react-native';
-import { getAlarmSoundForMedication } from '../services/alarmService';
+import { getAlarmSoundForMedication, stopAlarmSound } from '../services/alarmService';
 import { useFocusEffect } from '@react-navigation/native';
 import Dayjs from 'dayjs';
 import { Colors } from '../theme/colors';
@@ -24,6 +24,7 @@ export default function HomeScreen({ navigation, route, onLogout }) {
   const [showSettings, setShowSettings] = useState(false);
   const [alarmMedication, setAlarmMedication] = useState(null);
   const [showAlarmModal, setShowAlarmModal] = useState(false);
+  const [triggeredAlarms, setTriggeredAlarms] = useState(new Set());
 
   const loadMedicationsForDate = async (selectedDate, showRefreshIndicator = false) => {
     try {
@@ -106,7 +107,13 @@ export default function HomeScreen({ navigation, route, onLogout }) {
           // Check if schedule should be displayed today based on repeatPattern
           let shouldDisplay = true;
           
-          if (schedule.repeatPattern === 'WEEKLY' && schedule.dayOfWeek) {
+          if (schedule.repeatPattern === 'EVERY_X_DAYS' && schedule.interval) {
+            // Calculate days since start date
+            const startDate = Dayjs(prescription.startdate);
+            const daysSinceStart = selectedDate.diff(startDate, 'day');
+            shouldDisplay = daysSinceStart % schedule.interval === 0;
+            console.log(`EVERY_X_DAYS schedule: interval=${schedule.interval}, daysSinceStart=${daysSinceStart}, display: ${shouldDisplay}`);
+          } else if (schedule.repeatPattern === 'WEEKLY' && schedule.dayOfWeek) {
             const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
             const selectedDay = dayNames[selectedDate.day()];
             shouldDisplay = schedule.dayOfWeek.toUpperCase() === selectedDay;
@@ -199,23 +206,41 @@ export default function HomeScreen({ navigation, route, onLogout }) {
   useEffect(() => {
     const checkAlarms = () => {
       const currentTime = now.format('HH:mm');
+      const currentDate = date.format('YYYY-MM-DD');
       
       // Find medications that should alarm now
-      const alarmMeds = data.filter(med => 
-        med.time === currentTime && 
-        med.status === 'pending' &&
-        med.notificationEnabled
-      );
+      const alarmMeds = data.filter(med => {
+        const alarmKey = `${currentDate}-${med.prescriptionId}-${med.time}`;
+        return (
+          med.time === currentTime && 
+          med.status === 'pending' &&
+          med.notificationEnabled &&
+          !triggeredAlarms.has(alarmKey) // Don't trigger same alarm twice
+        );
+      });
 
       if (alarmMeds.length > 0 && !showAlarmModal) {
-        // Show alarm for first medication
-        setAlarmMedication(alarmMeds[0]);
+        const firstMed = alarmMeds[0];
+        const alarmKey = `${currentDate}-${firstMed.prescriptionId}-${firstMed.time}`;
+        
+        console.log('Triggering alarm for:', firstMed.name, 'at', currentTime);
+        
+        // Mark this alarm as triggered
+        setTriggeredAlarms(prev => new Set([...prev, alarmKey]));
+        
+        // Show alarm
+        setAlarmMedication(firstMed);
         setShowAlarmModal(true);
       }
     };
 
     checkAlarms();
-  }, [now, data, showAlarmModal]);
+  }, [now, data, showAlarmModal, date, triggeredAlarms]);
+  
+  // Reset triggered alarms when date changes
+  useEffect(() => {
+    setTriggeredAlarms(new Set());
+  }, [date]);
 
   const grouped = useMemo(() => {
     const m = new Map();
@@ -303,13 +328,16 @@ export default function HomeScreen({ navigation, route, onLogout }) {
   };
 
   const handleAlarmDismiss = async () => {
+    console.log('HomeScreen: Dismissing alarm modal');
+    
     // Stop alarm sound first
-    const { stopAlarmSound } = require('../services/alarmService');
     await stopAlarmSound();
     
-    // Close modal
+    // Close modal and clear state
     setShowAlarmModal(false);
     setAlarmMedication(null);
+    
+    console.log('HomeScreen: Alarm dismissed successfully');
   };
 
   if (loading) {

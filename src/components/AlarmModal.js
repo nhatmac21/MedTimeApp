@@ -17,9 +17,13 @@ const { width } = Dimensions.get('window');
 export default function AlarmModal({ visible, medication, onDismiss }) {
   const [pulseAnim] = useState(new Animated.Value(1));
   const animationRef = useRef(null);
+  const isPlayingRef = useRef(false);
 
   useEffect(() => {
-    if (visible && medication) {
+    if (visible && medication && !isPlayingRef.current) {
+      console.log('AlarmModal: Starting alarm for', medication.name);
+      isPlayingRef.current = true;
+      
       // Play alarm sound
       playAlarmSound(medication.alarmSound || 'alarm1').catch(console.error);
 
@@ -41,22 +45,29 @@ export default function AlarmModal({ visible, medication, onDismiss }) {
       animationRef.current.start();
     }
 
-    return () => {
+    // Cleanup when modal closes
+    if (!visible && isPlayingRef.current) {
+      console.log('AlarmModal: Cleaning up alarm');
       if (animationRef.current) {
         animationRef.current.stop();
       }
       stopAlarmSound();
-    };
+      isPlayingRef.current = false;
+    }
   }, [visible, medication]);
 
   const handleDismiss = async () => {
+    console.log('AlarmModal: User dismissed alarm');
+    
     // Stop animation
     if (animationRef.current) {
       animationRef.current.stop();
+      animationRef.current = null;
     }
     
     // Stop alarm sound
     await stopAlarmSound();
+    isPlayingRef.current = false;
     
     // Close modal and go back to HomeScreen
     onDismiss();

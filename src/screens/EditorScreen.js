@@ -302,7 +302,31 @@ export default function EditorScreen({ navigation }) {
           
           savedCount++;
         } else {
-          console.error('❌ Failed to create prescription:', result.error);
+          
+          
+          // Check if it's a premium limitation error
+          if (result.statusCode === 403 || 
+              (result.errors && result.errors.some(err => err.includes('premium'))) ||
+              (result.error && result.error.includes('premium'))) {
+            // Show premium upgrade alert
+            Alert.alert(
+              '💎 Nâng cấp Premium',
+              'Bạn đã đạt giới hạn miễn phí (2 loại thuốc). Nâng cấp lên Premium để thêm nhiều thuốc hơn và sử dụng đầy đủ tính năng.',
+              [
+                {
+                  text: 'Để sau',
+                  style: 'cancel',
+                },
+                {
+                  text: 'Nâng cấp ngay',
+                  onPress: () => navigation.navigate('Premium'),
+                  style: 'default',
+                }
+              ]
+            );
+            return; // Stop processing
+          }
+          
           throw new Error(result.error || 'Không thể tạo nhắc nhở');
         }
       }
@@ -325,7 +349,27 @@ export default function EditorScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Save error:', error);
-      Alert.alert('⚠️ Có lỗi xảy ra', error.message || 'Không thể lưu thuốc. Vui lòng thử lại!');
+      
+      // Check if it's a premium error that wasn't caught above
+      if (error.message && error.message.includes('premium')) {
+        Alert.alert(
+          '💎 Nâng cấp Premium',
+          'Bạn đã đạt giới hạn miễn phí. Nâng cấp lên Premium để sử dụng đầy đủ tính năng.',
+          [
+            {
+              text: 'Để sau',
+              style: 'cancel',
+            },
+            {
+              text: 'Nâng cấp ngay',
+              onPress: () => navigation.navigate('Premium'),
+              style: 'default',
+            }
+          ]
+        );
+      } else {
+        Alert.alert('⚠️ Có lỗi xảy ra', error.message || 'Không thể lưu thuốc. Vui lòng thử lại!');
+      }
     } finally {
       setLoading(false);
     }
@@ -580,23 +624,6 @@ export default function EditorScreen({ navigation }) {
                 )}
               </View>
             ))}
-            
-            <TouchableOpacity style={[styles.addMedBtn, selectedMeds.length >= 2 && styles.addMedBtnPremium]} onPress={addMedicationSlot}>
-              <Ionicons 
-                name={selectedMeds.length >= 2 ? "diamond" : "add-circle-outline"} 
-                size={20} 
-                color={selectedMeds.length >= 2 ? Colors.accent : Colors.primaryDark} 
-              />
-              <Text style={[styles.addMedText, selectedMeds.length >= 2 && styles.addMedTextPremium]}>
-                {selectedMeds.length >= 2 ? "Nâng cấp Premium để thêm thuốc" : "Thêm thuốc khác"}
-              </Text>
-            </TouchableOpacity>
-            
-            {selectedMeds.length >= 2 && (
-              <Text style={styles.premiumHint}>
-                💎 Miễn phí: tối đa 2 loại thuốc • Premium: không giới hạn
-              </Text>
-            )}
           </View>
 
           <View style={styles.inputGroup}>

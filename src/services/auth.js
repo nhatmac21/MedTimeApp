@@ -60,23 +60,62 @@ const apiRequest = async (endpoint, options = {}) => {
     // Check if response is ok first
     if (!response.ok) {
       console.log('Response not OK:', response.status);
-      if (response.status === 401) {
-        return { success: false, error: 'Tên đăng nhập hoặc mật khẩu không đúng' };
-      } else if (response.status === 403) {
-        return { success: false, error: 'Bạn không có quyền thực hiện thao tác này' };
-      } else if (response.status === 400) {
-        // Try to get error details for 400
-        try {
-          const errorData = await response.json();
-          console.log('400 Error Data:', errorData);
-          return { success: false, error: errorData.message || 'Thông tin không hợp lệ' };
-        } catch {
-          return { success: false, error: 'Thông tin không hợp lệ' };
+      
+      // Try to parse error response body for detailed error info
+      try {
+        const errorData = await response.json();
+        console.log('Error Response Data:', errorData);
+        
+        if (response.status === 401) {
+          return { 
+            success: false, 
+            error: errorData.message || 'Tên đăng nhập hoặc mật khẩu không đúng',
+            statusCode: errorData.statusCode || 401,
+            errors: errorData.errors || []
+          };
+        } else if (response.status === 403) {
+          return { 
+            success: false, 
+            error: errorData.message || 'Bạn không có quyền thực hiện thao tác này',
+            statusCode: errorData.statusCode || 403,
+            errors: errorData.errors || []
+          };
+        } else if (response.status === 400) {
+          return { 
+            success: false, 
+            error: errorData.message || 'Thông tin không hợp lệ',
+            statusCode: errorData.statusCode || 400,
+            errors: errorData.errors || []
+          };
+        } else if (response.status >= 500) {
+          return { 
+            success: false, 
+            error: errorData.message || 'Lỗi máy chủ, vui lòng thử lại sau',
+            statusCode: errorData.statusCode || response.status,
+            errors: errorData.errors || []
+          };
+        } else {
+          return { 
+            success: false, 
+            error: errorData.message || 'Đã xảy ra lỗi, vui lòng thử lại',
+            statusCode: errorData.statusCode || response.status,
+            errors: errorData.errors || []
+          };
         }
-      } else if (response.status >= 500) {
-        return { success: false, error: 'Lỗi máy chủ, vui lòng thử lại sau' };
-      } else {
-        return { success: false, error: 'Đã xảy ra lỗi, vui lòng thử lại' };
+      } catch (parseError) {
+        console.log('Could not parse error response:', parseError);
+        // Fallback to simple error messages if parsing fails
+        if (response.status === 401) {
+          return { success: false, error: 'Tên đăng nhập hoặc mật khẩu không đúng', statusCode: 401, errors: [] };
+        } else if (response.status === 403) {
+          return { success: false, error: 'Bạn không có quyền thực hiện thao tác này', statusCode: 403, errors: [] };
+        } else if (response.status === 400) {
+          return { success: false, error: 'Thông tin không hợp lệ', statusCode: 400, errors: [] };
+        } else if (response.status >= 500) {
+          return { success: false, error: 'Lỗi máy chủ, vui lòng thử lại sau', statusCode: response.status, errors: [] };
+        } else {
+          return { success: false, error: 'Đã xảy ra lỗi, vui lòng thử lại', statusCode: response.status, errors: [] };
+        }
       }
     }
 
@@ -447,7 +486,12 @@ export const createPrescription = async (prescriptionData) => {
     if (result.success) {
       return { success: true, data: result.data };
     } else {
-      return { success: false, error: result.error || 'Không thể tạo nhắc nhở' };
+      return { 
+        success: false, 
+        error: result.error || result.message || 'Không thể tạo nhắc nhở',
+        statusCode: result.statusCode,
+        errors: result.errors
+      };
     }
   } catch (error) {
     return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
