@@ -544,6 +544,30 @@ export const deletePrescription = async (prescriptionId) => {
   }
 };
 
+// Intake Log API functions
+export const createIntakeLog = async (intakeData) => {
+  try {
+    console.log('=== CREATE INTAKE LOG ===');
+    console.log('Intake Data:', intakeData);
+    
+    const result = await apiRequest('/intakelog', {
+      method: 'POST',
+      body: JSON.stringify(intakeData),
+    });
+    
+    console.log('Create Intake Log Result:', result);
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể ghi nhận uống thuốc' };
+    }
+  } catch (error) {
+    console.log('Create Intake Log Error:', error);
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
 // Medicine API functions
 export const getMedicines = async (pageNumber = 1, pageSize = 50) => {
   try {

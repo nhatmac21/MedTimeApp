@@ -9,7 +9,7 @@ import SectionHeader from '../components/SectionHeader';
 import MedicationCard from '../components/MedicationCard';
 import AlarmModal from '../components/AlarmModal';
 import useClock from '../hooks/useClock';
-import { getPrescriptions, getPrescriptionSchedules, getMedicines, deletePrescription } from '../services/auth';
+import { getPrescriptions, getPrescriptionSchedules, getMedicines, deletePrescription, createIntakeLog } from '../services/auth';
 import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
 import SettingsScreen from './SettingsScreen';
 
@@ -269,14 +269,46 @@ export default function HomeScreen({ navigation, route, onLogout }) {
     return Array.from(m.entries()).sort(([a],[b]) => a.localeCompare(b));
   }, [data]);
 
-  const handleMarkTaken = (medication) => {
-    setData((prev) =>
-      prev.map((med) =>
-        med.id === medication.id
-          ? { ...med, status: 'taken', takenAt: now.format('H:mm') }
-          : med
-      )
-    );
+  const handleMarkTaken = async (medication) => {
+    try {
+      console.log('=== MARK TAKEN ===');
+      console.log('Medication:', medication);
+      
+      // Call API to log intake
+      const intakeData = {
+        prescriptionid: medication.prescriptionId,
+        scheduleid: medication.scheduleId,
+        actiontime: now.toISOString(), // Current time in ISO format
+        action: 'taken',
+        confirmedBy: 'user',
+        notes: medication.notes || ''
+      };
+      
+      console.log('Creating intake log:', intakeData);
+      const result = await createIntakeLog(intakeData);
+      
+      if (result.success) {
+        console.log('✅ Intake log created successfully');
+        
+        // Update local state
+        setData((prev) =>
+          prev.map((med) =>
+            med.id === medication.id
+              ? { ...med, status: 'taken', takenAt: now.format('H:mm') }
+              : med
+          )
+        );
+        
+        // Optional: Show success message
+        // Alert.alert('Thành công', 'Đã ghi nhận uống thuốc');
+      } else {
+        console.error('❌ Failed to create intake log:', result.error);
+        Alert.alert('Lỗi', result.error || 'Không thể ghi nhận uống thuốc');
+      }
+    } catch (error) {
+      console.error('Error marking taken:', error);
+      Alert.alert('Lỗi', 'Có lỗi xảy ra khi ghi nhận uống thuốc');
+    }
   };
 
   const handleMarkSkipped = (medication) => {
