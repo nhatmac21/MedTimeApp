@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Text, ActivityIndicator } from 'react-native';
+import { getAlarmSoundForMedication, stopAlarmSound } from '../services/alarmService';
 import { useFocusEffect } from '@react-navigation/native';
 import Dayjs from 'dayjs';
 import { Colors } from '../theme/colors';
 import DayCarousel from '../components/DayCarousel';
 import SectionHeader from '../components/SectionHeader';
 import MedicationCard from '../components/MedicationCard';
+import AlarmModal from '../components/AlarmModal';
 import useClock from '../hooks/useClock';
-import { getPrescriptions, getPrescriptionSchedules, getMedicines } from '../services/auth';
+import { getPrescriptions, getPrescriptionSchedules, getMedicines, deletePrescription, createIntakeLog } from '../services/auth';
 import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
 import SettingsScreen from './SettingsScreen';
 
@@ -20,6 +22,9 @@ export default function HomeScreen({ navigation, route, onLogout }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [medicines, setMedicines] = useState({});
   const [showSettings, setShowSettings] = useState(false);
+  const [alarmMedication, setAlarmMedication] = useState(null);
+  const [showAlarmModal, setShowAlarmModal] = useState(false);
+  const [triggeredAlarms, setTriggeredAlarms] = useState(new Set());
 
   const loadMedicationsForDate = async (selectedDate, showRefreshIndicator = false) => {
     try {
@@ -82,18 +87,33 @@ export default function HomeScreen({ navigation, route, onLogout }) {
       // Combine prescriptions with schedules
       const medications = [];
       
-      activePrescriptions.forEach(prescription => {
+      for (const prescription of activePrescriptions) {
         const prescriptionSchedules = schedulesResult.data.items.filter(
           s => s.prescriptionid === prescription.prescriptionid
         );
 
         console.log(`Prescription ${prescription.prescriptionid} has ${prescriptionSchedules.length} schedules`);
 
-        prescriptionSchedules.forEach(schedule => {
+        // Get alarm sound for this prescription
+        const alarmSound = await getAlarmSoundForMedication(prescription.prescriptionid);
+
+        for (const schedule of prescriptionSchedules) {
+          // Skip schedules with null interval (default backend schedules)
+          if (schedule.interval === null || schedule.interval === undefined) {
+            console.log(`Skipping schedule ${schedule.scheduleid} with null interval`);
+            continue;
+          }
+
           // Check if schedule should be displayed today based on repeatPattern
           let shouldDisplay = true;
           
-          if (schedule.repeatPattern === 'WEEKLY' && schedule.dayOfWeek) {
+          if (schedule.repeatPattern === 'EVERY_X_DAYS' && schedule.interval) {
+            // Calculate days since start date
+            const startDate = Dayjs(prescription.startdate);
+            const daysSinceStart = selectedDate.diff(startDate, 'day');
+            shouldDisplay = daysSinceStart % schedule.interval === 0;
+            console.log(`EVERY_X_DAYS schedule: interval=${schedule.interval}, daysSinceStart=${daysSinceStart}, display: ${shouldDisplay}`);
+          } else if (schedule.repeatPattern === 'WEEKLY' && schedule.dayOfWeek) {
             const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
             const selectedDay = dayNames[selectedDate.day()];
             shouldDisplay = schedule.dayOfWeek.toUpperCase() === selectedDay;
@@ -115,11 +135,12 @@ export default function HomeScreen({ navigation, route, onLogout }) {
               notes: prescription.notes,
               time: schedule.timeofday ? schedule.timeofday.substring(0, 5) : '08:00', // HH:mm format
               status: 'pending', // Default status, can be updated later
-              notificationEnabled: schedule.notificationenabled
+              notificationEnabled: schedule.notificationenabled,
+              alarmSound: alarmSound
             });
           }
-        });
-      });
+        }
+      }
 
       setData(medications);
       console.log(`Loaded ${medications.length} medications for ${selectedDateStr}`);
@@ -181,24 +202,113 @@ export default function HomeScreen({ navigation, route, onLogout }) {
     })();
   }, [data, date]);
 
+  // Check for alarms that need to trigger
+  useEffect(() => {
+    const checkAlarms = () => {
+      const currentTime = now.format('HH:mm');
+      const currentDate = date.format('YYYY-MM-DD');
+      
+      // Find medications that should alarm now
+      const alarmMeds = data.filter(med => {
+        const alarmKey = `${currentDate}-${med.prescriptionId}-${med.time}`;
+        return (
+          med.time === currentTime && 
+          med.status === 'pending' &&
+          med.notificationEnabled &&
+          !triggeredAlarms.has(alarmKey) // Don't trigger same alarm twice
+        );
+      });
+
+      if (alarmMeds.length > 0 && !showAlarmModal) {
+        const firstMed = alarmMeds[0];
+        const alarmKey = `${currentDate}-${firstMed.prescriptionId}-${firstMed.time}`;
+        
+        console.log('Triggering alarm for:', firstMed.name, 'at', currentTime);
+        
+        // Mark this alarm as triggered
+        setTriggeredAlarms(prev => new Set([...prev, alarmKey]));
+        
+        // Show alarm
+        setAlarmMedication(firstMed);
+        setShowAlarmModal(true);
+      }
+    };
+
+    checkAlarms();
+  }, [now, data, showAlarmModal, date, triggeredAlarms]);
+  
+  // Reset triggered alarms when date changes
+  useEffect(() => {
+    setTriggeredAlarms(new Set());
+  }, [date]);
+
   const grouped = useMemo(() => {
     const m = new Map();
+    
+    // Remove duplicates: same prescriptionId and time
+    const uniqueMeds = [];
+    const seen = new Set();
+    
     data.forEach((med) => {
+      const key = `${med.prescriptionId}-${med.time}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueMeds.push(med);
+      } else {
+        console.log(`Skipping duplicate medication: ${med.name} at ${med.time}`);
+      }
+    });
+    
+    // Group by time
+    uniqueMeds.forEach((med) => {
       const arr = m.get(med.time) || [];
       arr.push(med);
       m.set(med.time, arr);
     });
+    
     return Array.from(m.entries()).sort(([a],[b]) => a.localeCompare(b));
   }, [data]);
 
-  const handleMarkTaken = (medication) => {
-    setData((prev) =>
-      prev.map((med) =>
-        med.id === medication.id
-          ? { ...med, status: 'taken', takenAt: now.format('H:mm') }
-          : med
-      )
-    );
+  const handleMarkTaken = async (medication) => {
+    try {
+      console.log('=== MARK TAKEN ===');
+      console.log('Medication:', medication);
+      
+      // Call API to log intake
+      const intakeData = {
+        prescriptionid: medication.prescriptionId,
+        scheduleid: medication.scheduleId,
+        actiontime: now.toISOString(), // Current time in ISO format
+        action: 'taken',
+        confirmedBy: 'user',
+        notes: medication.notes || ''
+      };
+      
+      console.log('Creating intake log:', intakeData);
+      const result = await createIntakeLog(intakeData);
+      
+      if (result.success) {
+        console.log('✅ Intake log created successfully');
+        
+        // Update local state
+        setData((prev) =>
+          prev.map((med) =>
+            med.id === medication.id
+              ? { ...med, status: 'taken', takenAt: now.format('H:mm') }
+              : med
+          )
+        );
+        
+        // Optional: Show success message
+        // Alert.alert('Thành công', 'Đã ghi nhận uống thuốc');
+      } else {
+        console.error('❌ Failed to create intake log:', result.error);
+        Alert.alert('Lỗi', result.error || 'Không thể ghi nhận uống thuốc');
+      }
+    } catch (error) {
+      console.error('Error marking taken:', error);
+      Alert.alert('Lỗi', 'Có lỗi xảy ra khi ghi nhận uống thuốc');
+    }
   };
 
   const handleMarkSkipped = (medication) => {
@@ -209,6 +319,57 @@ export default function HomeScreen({ navigation, route, onLogout }) {
           : med
       )
     );
+  };
+
+  const handleDeleteMedication = (medication) => {
+    Alert.alert(
+      'Xóa nhắc nhở',
+      `Bạn có chắc chắn muốn xóa nhắc nhở "${medication.name}"?`,
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('Deleting prescription:', medication.prescriptionId);
+              const result = await deletePrescription(medication.prescriptionId);
+              
+              if (result.success) {
+                // Remove from local state
+                setData((prev) => prev.filter((med) => med.prescriptionId !== medication.prescriptionId));
+                
+                Alert.alert('Thành công', 'Đã xóa nhắc nhở thành công');
+                
+                // Reload data to ensure sync with backend
+                loadMedicationsForDate(date, true);
+              } else {
+                Alert.alert('Lỗi', result.error || 'Không thể xóa nhắc nhở');
+              }
+            } catch (error) {
+              console.error('Error deleting medication:', error);
+              Alert.alert('Lỗi', 'Có lỗi xảy ra khi xóa nhắc nhở');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAlarmDismiss = async () => {
+    console.log('HomeScreen: Dismissing alarm modal');
+    
+    // Stop alarm sound first
+    await stopAlarmSound();
+    
+    // Close modal and clear state
+    setShowAlarmModal(false);
+    setAlarmMedication(null);
+    
+    console.log('HomeScreen: Alarm dismissed successfully');
   };
 
   if (loading) {
@@ -251,13 +412,11 @@ export default function HomeScreen({ navigation, route, onLogout }) {
                     takenInfo={
                       med.status === 'taken'
                         ? `Đã uống lúc ${med.takenAt}`
-                        : med.status === 'skipped'
-                        ? `Bỏ qua lúc ${time}`
                         : ''
                     }
                     onTake={() => handleMarkTaken(med)}
-                    onSkip={() => handleMarkSkipped(med)}
-                    onDelete={null} // Disable delete for now, can be added later
+                    onSkip={null}
+                    onDelete={() => handleDeleteMedication(med)}
                   />
                 ))}
               </View>
@@ -270,6 +429,12 @@ export default function HomeScreen({ navigation, route, onLogout }) {
         visible={showSettings}
         onClose={() => setShowSettings(false)}
         onLogout={onLogout}
+      />
+
+      <AlarmModal
+        visible={showAlarmModal}
+        medication={alarmMedication}
+        onDismiss={handleAlarmDismiss}
       />
     </>
   );

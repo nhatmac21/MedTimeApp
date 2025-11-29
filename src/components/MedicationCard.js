@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 
-const Check = () => <Ionicons name="checkmark" size={44} color={Colors.white} />;
-const Cross = () => <Ionicons name="close" size={44} color={Colors.white} />;
+const Check = () => <Ionicons name="checkmark" size={32} color={Colors.white} />;
+const Cross = () => <Ionicons name="close" size={32} color={Colors.white} />;
 
 export default function MedicationCard({
   name,
@@ -38,16 +38,18 @@ export default function MedicationCard({
           </TouchableOpacity>
         )}
         
-        {/* Show two buttons for pending status */}
+        {/* Show buttons for pending status */}
         {isPending ? (
           <>
-            <TouchableOpacity
-              accessibilityRole="button"
-              style={[styles.action, { backgroundColor: Colors.danger }]}
-              onPress={onSkip}
-            >
-              <Cross />
-            </TouchableOpacity>
+            {onSkip && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={[styles.action, { backgroundColor: Colors.danger }]}
+                onPress={onSkip}
+              >
+                <Cross />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               accessibilityRole="button"
               style={[styles.action, { backgroundColor: Colors.primary }]}
@@ -94,12 +96,12 @@ const styles = StyleSheet.create({
   note: { marginTop: 6, color: Colors.textSecondary, fontWeight: '500' },
   actionGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   action: {
-    width: 72, height: 72, borderRadius: 36,
+    width: 56, height: 56, borderRadius: 28,
     alignItems: 'center', justifyContent: 'center',
   },
   actionDisabled: { opacity: 1 },
   deleteBtn: {
-    width: 72, height: 72, borderRadius: 36,
+    width: 56, height: 56, borderRadius: 28,
     backgroundColor: Colors.danger,
     alignItems: 'center', justifyContent: 'center',
   },

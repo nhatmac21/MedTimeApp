@@ -16,13 +16,32 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import MedicationPicker from '../components/MedicationPicker';
 import TimePicker from '../components/TimePicker';
+import DatePicker from '../components/DatePicker';
+import AlarmSoundPicker from '../components/AlarmSoundPicker';
+import RepeatPatternPicker from '../components/RepeatPatternPicker';
 import { createPrescription, createPrescriptionSchedule, getPrescriptions } from '../services/auth';
+import { saveAlarmSettings } from '../services/alarmService';
 import { scheduleLocalNotification, buildDateFromTime } from '../services/localNotifications';
 import dayjs from 'dayjs';
 
 export default function EditorScreen({ navigation }) {
-  const [selectedMeds, setSelectedMeds] = useState([{ med: null, dosage: '', quantity: '1' }]);
+  const [selectedMeds, setSelectedMeds] = useState([{ 
+    med: null, 
+    dosage: '', 
+    quantity: '1',
+    notes: '',
+    startDate: dayjs().format('YYYY-MM-DD'),
+    endDate: dayjs().add(30, 'day').format('YYYY-MM-DD'),
+    doctorName: '',
+    alarmSound: 'alarm1'
+  }]);
   const [times, setTimes] = useState(['']);
+  const [repeatPattern, setRepeatPattern] = useState({
+    pattern: 'DAILY',
+    interval: 1,
+    dayOfWeek: null,
+    dayOfMonth: null,
+  });
   const [loading, setLoading] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [medicationCount, setMedicationCount] = useState(0);
@@ -61,7 +80,16 @@ export default function EditorScreen({ navigation }) {
       setShowPremiumModal(true);
       return;
     }
-    setSelectedMeds([...selectedMeds, { med: null, dosage: '', quantity: '1' }]);
+    setSelectedMeds([...selectedMeds, { 
+      med: null, 
+      dosage: '', 
+      quantity: '1',
+      notes: '',
+      startDate: dayjs().format('YYYY-MM-DD'),
+      endDate: dayjs().add(30, 'day').format('YYYY-MM-DD'),
+      doctorName: '',
+      alarmSound: 'alarm1'
+    }]);
   };
 
   const updateMedication = (index, field, value) => {
@@ -85,6 +113,11 @@ export default function EditorScreen({ navigation }) {
   };
 
   const addTimeSlot = () => {
+    // Limit to 4 time slots maximum
+    if (times.length >= 4) {
+      Alert.alert('Giới hạn tần suất', 'Tối đa 4 mốc giờ trong 1 ngày');
+      return;
+    }
     setTimes([...times, '']);
   };
 
@@ -126,6 +159,27 @@ export default function EditorScreen({ navigation }) {
       if (!medItem.quantity || medItem.quantity.trim() === '' || isNaN(parseInt(medItem.quantity)) || parseInt(medItem.quantity) < 1) {
         Alert.alert('Thông tin chưa đầy đủ', `Vui lòng nhập số lượng hợp lệ cho "${medItem.med.name}"`);
         return false;
+      }
+
+      // Validate dates
+      if (medItem.startDate && medItem.endDate) {
+        const start = dayjs(medItem.startDate);
+        const end = dayjs(medItem.endDate);
+        
+        if (!start.isValid()) {
+          Alert.alert('Ngày không hợp lệ', `Ngày bắt đầu không đúng định dạng cho "${medItem.med.name}"`);
+          return false;
+        }
+        
+        if (!end.isValid()) {
+          Alert.alert('Ngày không hợp lệ', `Ngày kết thúc không đúng định dạng cho "${medItem.med.name}"`);
+          return false;
+        }
+        
+        if (end.isBefore(start)) {
+          Alert.alert('Ngày không hợp lệ', `Ngày kết thúc phải sau ngày bắt đầu cho "${medItem.med.name}"`);
+          return false;
+        }
       }
     }
 
@@ -172,9 +226,12 @@ export default function EditorScreen({ navigation }) {
       for (const medItem of validMeds) {
         console.log('Creating prescription for:', medItem.med.name);
         
-        // Calculate start and end dates
-        const startDate = dayjs().format('YYYY-MM-DD');
-        const endDate = dayjs().add(30, 'day').format('YYYY-MM-DD'); // Default 30 days
+        // Use dates from form or defaults
+        const startDate = medItem.startDate || dayjs().format('YYYY-MM-DD');
+        const endDate = medItem.endDate || dayjs().add(30, 'day').format('YYYY-MM-DD');
+        
+        // Calculate days between start and end
+        const daysCount = dayjs(endDate).diff(dayjs(startDate), 'day') + 1;
         
         // Create prescription via backend API
         const prescriptionData = {
@@ -183,8 +240,9 @@ export default function EditorScreen({ navigation }) {
           frequencyperday: validTimes.length,
           startdate: startDate,
           enddate: endDate,
-          remainingquantity: parseInt(medItem.quantity) * validTimes.length * 30, // quantity per dose * times per day * 30 days
-          notes: medItem.med.notes || ''
+          remainingquantity: parseInt(medItem.quantity) * validTimes.length * daysCount, // quantity per dose * times per day * number of days
+          doctorname: medItem.doctorName || '',
+          notes: medItem.notes || ''
         };
         
         console.log('Prescription data:', prescriptionData);
@@ -201,8 +259,10 @@ export default function EditorScreen({ navigation }) {
             const scheduleData = {
               prescriptionid: prescriptionId,
               timeofday: `${timeSlot}:00`, // Backend expects HH:mm:ss
-              interval: 1,
-              repeatPattern: 'DAILY',
+              interval: repeatPattern.interval,
+              repeatPattern: repeatPattern.pattern,
+              dayOfWeek: repeatPattern.dayOfWeek,
+              dayofmonth: repeatPattern.dayOfMonth,
               notificationenabled: true
             };
             
@@ -211,6 +271,11 @@ export default function EditorScreen({ navigation }) {
             
             if (scheduleResult.success) {
               console.log('✅ Schedule created successfully');
+              
+              // Save alarm sound setting for this prescription
+              if (medItem.alarmSound) {
+                await saveAlarmSettings(prescriptionId, medItem.alarmSound);
+              }
               
               // Schedule local notification
               const today = dayjs();
@@ -221,7 +286,12 @@ export default function EditorScreen({ navigation }) {
                 await scheduleLocalNotification({
                   title: `Nhắc uống: ${medItem.med.name}`,
                   body: `${medItem.dosage.trim()}, uống ${medItem.quantity} viên lúc ${timeSlot}`,
-                  data: { medicineId: medItem.med.id, time: timeSlot },
+                  data: { 
+                    medicineId: medItem.med.id, 
+                    prescriptionId: prescriptionId,
+                    time: timeSlot,
+                    alarmSound: medItem.alarmSound
+                  },
                   trigger: notificationDate,
                 });
               }
@@ -232,7 +302,31 @@ export default function EditorScreen({ navigation }) {
           
           savedCount++;
         } else {
-          console.error('❌ Failed to create prescription:', result.error);
+          
+          
+          // Check if it's a premium limitation error
+          if (result.statusCode === 403 || 
+              (result.errors && result.errors.some(err => err.includes('premium'))) ||
+              (result.error && result.error.includes('premium'))) {
+            // Show premium upgrade alert
+            Alert.alert(
+              '💎 Nâng cấp Premium',
+              'Bạn đã đạt giới hạn miễn phí (2 loại thuốc). Nâng cấp lên Premium để thêm nhiều thuốc hơn và sử dụng đầy đủ tính năng.',
+              [
+                {
+                  text: 'Để sau',
+                  style: 'cancel',
+                },
+                {
+                  text: 'Nâng cấp ngay',
+                  onPress: () => navigation.navigate('Premium'),
+                  style: 'default',
+                }
+              ]
+            );
+            return; // Stop processing
+          }
+          
           throw new Error(result.error || 'Không thể tạo nhắc nhở');
         }
       }
@@ -255,15 +349,50 @@ export default function EditorScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Save error:', error);
-      Alert.alert('⚠️ Có lỗi xảy ra', error.message || 'Không thể lưu thuốc. Vui lòng thử lại!');
+      
+      // Check if it's a premium error that wasn't caught above
+      if (error.message && error.message.includes('premium')) {
+        Alert.alert(
+          '💎 Nâng cấp Premium',
+          'Bạn đã đạt giới hạn miễn phí. Nâng cấp lên Premium để sử dụng đầy đủ tính năng.',
+          [
+            {
+              text: 'Để sau',
+              style: 'cancel',
+            },
+            {
+              text: 'Nâng cấp ngay',
+              onPress: () => navigation.navigate('Premium'),
+              style: 'default',
+            }
+          ]
+        );
+      } else {
+        Alert.alert('⚠️ Có lỗi xảy ra', error.message || 'Không thể lưu thuốc. Vui lòng thử lại!');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const resetForm = () => {
-    setSelectedMeds([{ med: null, dosage: '', quantity: '1' }]);
+    setSelectedMeds([{ 
+      med: null, 
+      dosage: '', 
+      quantity: '1',
+      notes: '',
+      startDate: dayjs().format('YYYY-MM-DD'),
+      endDate: dayjs().add(30, 'day').format('YYYY-MM-DD'),
+      doctorName: '',
+      alarmSound: 'alarm1'
+    }]);
     setTimes(['']);
+    setRepeatPattern({
+      pattern: 'DAILY',
+      interval: 1,
+      dayOfWeek: null,
+      dayOfMonth: null,
+    });
   };
 
   const handlePremiumUpgrade = () => {
@@ -398,6 +527,89 @@ export default function EditorScreen({ navigation }) {
                   </View>
                 </View>
 
+                {/* Ngày bắt đầu và ngày kết thúc */}
+                <View style={styles.dateRow}>
+                  <View style={styles.dateContainer}>
+                    <DatePicker
+                      label="Ngày bắt đầu"
+                      value={medItem.startDate}
+                      onDateChange={(date) => updateMedication(index, 'startDate', date)}
+                      minDate={dayjs().format('YYYY-MM-DD')}
+                    />
+                  </View>
+
+                  <View style={styles.dateContainer}>
+                    <DatePicker
+                      label="Ngày kết thúc"
+                      value={medItem.endDate}
+                      onDateChange={(date) => updateMedication(index, 'endDate', date)}
+                      minDate={medItem.startDate || dayjs().format('YYYY-MM-DD')}
+                    />
+                  </View>
+                </View>
+
+                {/* Tần suất */}
+                <View style={styles.frequencySection}>
+                  <Text style={styles.subLabel}>Tần suất/ngày (tối đa 4 lần)</Text>
+                  <View style={styles.frequencyOptions}>
+                    {[1, 2, 3, 4].map((freq) => (
+                      <TouchableOpacity
+                        key={freq}
+                        style={[
+                          styles.frequencyChip,
+                          times.filter(t => t.trim()).length === freq && styles.selectedFrequencyChip
+                        ]}
+                        onPress={() => {
+                          // Generate time slots based on frequency
+                          const newTimes = [];
+                          if (freq === 1) {
+                            newTimes.push('08:00');
+                          } else if (freq === 2) {
+                            newTimes.push('08:00', '20:00');
+                          } else if (freq === 3) {
+                            newTimes.push('08:00', '14:00', '20:00');
+                          } else if (freq === 4) {
+                            newTimes.push('08:00', '12:00', '16:00', '20:00');
+                          }
+                          setTimes(newTimes);
+                        }}
+                      >
+                        <Ionicons 
+                          name="time-outline" 
+                          size={18} 
+                          color={times.filter(t => t.trim()).length === freq ? Colors.white : Colors.primary} 
+                        />
+                        <Text style={[
+                          styles.frequencyChipText,
+                          times.filter(t => t.trim()).length === freq && styles.selectedFrequencyText
+                        ]}>
+                          {freq} lần
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Ghi chú */}
+                <View style={styles.notesContainer}>
+                  <Text style={styles.subLabel}>Ghi chú</Text>
+                  <TextInput
+                    style={styles.notesInput}
+                    value={medItem.notes || ''}
+                    onChangeText={(text) => updateMedication(index, 'notes', text)}
+                    placeholder="Thêm ghi chú về cách dùng thuốc..."
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {/* Alarm Sound Picker */}
+                <AlarmSoundPicker
+                  selectedSound={medItem.alarmSound}
+                  onSoundSelect={(sound) => updateMedication(index, 'alarmSound', sound.id)}
+                />
+
                 {medItem.med && (
                   <View style={styles.medicineDetails}>
                     <Text style={styles.medicineDetailText}>
@@ -412,27 +624,21 @@ export default function EditorScreen({ navigation }) {
                 )}
               </View>
             ))}
-            
-            <TouchableOpacity style={[styles.addMedBtn, selectedMeds.length >= 2 && styles.addMedBtnPremium]} onPress={addMedicationSlot}>
-              <Ionicons 
-                name={selectedMeds.length >= 2 ? "diamond" : "add-circle-outline"} 
-                size={20} 
-                color={selectedMeds.length >= 2 ? Colors.accent : Colors.primaryDark} 
-              />
-              <Text style={[styles.addMedText, selectedMeds.length >= 2 && styles.addMedTextPremium]}>
-                {selectedMeds.length >= 2 ? "Nâng cấp Premium để thêm thuốc" : "Thêm thuốc khác"}
-              </Text>
-            </TouchableOpacity>
-            
-            {selectedMeds.length >= 2 && (
-              <Text style={styles.premiumHint}>
-                💎 Miễn phí: tối đa 2 loại thuốc • Premium: không giới hạn
-              </Text>
-            )}
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Mốc giờ nhắc nhở</Text>
+            
+            {/* Repeat Pattern Picker */}
+            <RepeatPatternPicker
+              selectedPattern={repeatPattern.pattern}
+              interval={repeatPattern.interval}
+              dayOfWeek={repeatPattern.dayOfWeek}
+              dayOfMonth={repeatPattern.dayOfMonth}
+              onPatternChange={(data) => setRepeatPattern(data)}
+            />
+            
+            <Text style={styles.hintText}>Chọn tần suất để tự động tạo mốc giờ, sau đó có thể điều chỉnh từng mốc</Text>
             {times.map((time, index) => (
               <View key={index} style={styles.timeRow}>
                 <View style={styles.timePickerWrapper}>
@@ -453,10 +659,16 @@ export default function EditorScreen({ navigation }) {
               </View>
             ))}
             
-            <TouchableOpacity style={styles.addTimeBtn} onPress={addTimeSlot}>
-              <Ionicons name="add-circle-outline" size={20} color={Colors.primaryDark} />
-              <Text style={styles.addTimeText}>Thêm mốc giờ</Text>
-            </TouchableOpacity>
+            {times.length < 4 && (
+              <TouchableOpacity 
+                style={[styles.addTimeBtn, times.length >= 4 && styles.addTimeBtnDisabled]} 
+                onPress={addTimeSlot}
+                disabled={times.length >= 4}
+              >
+                <Ionicons name="add-circle-outline" size={20} color={Colors.primaryDark} />
+                <Text style={styles.addTimeText}>Thêm mốc giờ</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
 
@@ -673,6 +885,61 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     textAlign: 'center',
   },
+  dateRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  dateContainer: {
+    flex: 1,
+  },
+  frequencySection: {
+    marginTop: 12,
+  },
+  frequencyOptions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  frequencyChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.surface,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  selectedFrequencyChip: {
+    backgroundColor: Colors.primaryDark,
+    borderColor: Colors.primaryDark,
+  },
+  frequencyChipText: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  selectedFrequencyText: {
+    color: Colors.white,
+  },
+  notesContainer: {
+    marginTop: 12,
+  },
+  notesInput: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minHeight: 80,
+  },
   addMedBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -729,6 +996,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.primaryDark,
     borderRadius: 12,
     borderStyle: 'dashed'
+  },
+  addTimeBtnDisabled: {
+    opacity: 0.5,
+    borderColor: Colors.textMuted,
   },
   addTimeText: { marginLeft: 8, color: Colors.primaryDark, fontWeight: '500' },
   footer: { 
