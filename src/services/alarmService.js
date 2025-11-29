@@ -11,6 +11,15 @@ const ALARM_SOUNDS = {
   alarm1: require('../../assets/sounds/alarm1.mp3'),
   alarm2: require('../../assets/sounds/alarm2.mp3'),
   alarm3: require('../../assets/sounds/alarm3.mp3'),
+  alarm4: require('../../assets/sounds/alarm4.mp3'),
+  alarm5: require('../../assets/sounds/alarm5.mp3'),
+  alarm6: require('../../assets/sounds/alarm6.mp3'),
+  alarm7: require('../../assets/sounds/alarm7.mp3'),
+  alarm8: require('../../assets/sounds/alarm8.mp3'),
+  alarm9: require('../../assets/sounds/alarm9.mp3'),
+  alarm10: require('../../assets/sounds/alarm10.mp3'),
+  alarm11: require('../../assets/sounds/alarm11.mp3'),
+  alarm12: require('../../assets/sounds/alarm12.mp3'),
 };
 
 // Initialize audio settings

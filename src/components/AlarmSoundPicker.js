@@ -4,7 +4,8 @@ import {
   Text, 
   TouchableOpacity, 
   StyleSheet, 
-  Modal 
+  Modal,
+  ScrollView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
@@ -14,6 +15,15 @@ const ALARM_SOUNDS = [
   { id: 'alarm1', name: 'Chuông 1', file: require('../../assets/sounds/alarm1.mp3') },
   { id: 'alarm2', name: 'Chuông 2', file: require('../../assets/sounds/alarm2.mp3') },
   { id: 'alarm3', name: 'Chuông 3', file: require('../../assets/sounds/alarm3.mp3') },
+  { id: 'alarm4', name: 'Chuông 4', file: require('../../assets/sounds/alarm4.mp3') },
+  { id: 'alarm5', name: 'Chuông 5', file: require('../../assets/sounds/alarm5.mp3') },
+  { id: 'alarm6', name: 'Chuông 6', file: require('../../assets/sounds/alarm6.mp3') },
+  { id: 'alarm7', name: 'Chuông 7', file: require('../../assets/sounds/alarm7.mp3') },
+  { id: 'alarm8', name: 'Chuông 8', file: require('../../assets/sounds/alarm8.mp3') },
+  { id: 'alarm9', name: 'Chuông 9', file: require('../../assets/sounds/alarm9.mp3') },
+  { id: 'alarm10', name: 'Chuông 10', file: require('../../assets/sounds/alarm10.mp3') },
+  { id: 'alarm11', name: 'Chuông 11', file: require('../../assets/sounds/alarm11.mp3') },
+  { id: 'alarm12', name: 'Chuông 12', file: require('../../assets/sounds/alarm12.mp3') },
 ];
 
 export default function AlarmSoundPicker({ selectedSound, onSoundSelect }) {
@@ -116,7 +126,11 @@ export default function AlarmSoundPicker({ selectedSound, onSoundSelect }) {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.soundList}>
+            <ScrollView 
+              style={styles.soundList}
+              showsVerticalScrollIndicator={true}
+              persistentScrollbar={true}
+            >
               {ALARM_SOUNDS.map((sound) => (
                 <View key={sound.id} style={styles.soundItem}>
                   <TouchableOpacity
@@ -157,7 +171,7 @@ export default function AlarmSoundPicker({ selectedSound, onSoundSelect }) {
                   </TouchableOpacity>
                 </View>
               ))}
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -204,6 +218,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 20,
+    maxHeight: '70%', // Giới hạn chiều cao tối đa 70% màn hình
   },
   modalHeader: {
     flexDirection: 'row',
@@ -222,6 +237,7 @@ const styles = StyleSheet.create({
   soundList: {
     paddingHorizontal: 20,
     paddingTop: 16,
+    paddingBottom: 8,
   },
   soundItem: {
     flexDirection: 'row',
