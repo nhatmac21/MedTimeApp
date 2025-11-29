@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { getUserInfo, updateUserInfo } from '../services/auth';
+import DateOfBirthPicker from '../components/DateOfBirthPicker';
 
 export default function AccountScreen({ visible, onClose }) {
   const [userInfo, setUserInfo] = useState(null);
@@ -108,35 +109,39 @@ export default function AccountScreen({ visible, onClose }) {
       field: 'fullname',
       value: editableData.fullname,
       placeholder: 'Nhập tên đầy đủ',
-      keyboardType: 'default'
+      keyboardType: 'default',
+      type: 'input'
     },
     {
       label: 'Gmail/E-mail',
       field: 'email',
       value: editableData.email,
       placeholder: 'Nhập email',
-      keyboardType: 'email-address'
+      keyboardType: 'email-address',
+      type: 'input'
     },
     {
       label: 'Số điện thoại',
       field: 'phonenumber',
       value: editableData.phonenumber,
       placeholder: 'Nhập số điện thoại',
-      keyboardType: 'phone-pad'
+      keyboardType: 'phone-pad',
+      type: 'input'
     },
     {
       label: 'Ngày sinh',
       field: 'dateofbirth',
-      value: formatDateForDisplay(editableData.dateofbirth),
-      placeholder: 'YYYY-MM-DD',
-      keyboardType: 'default'
+      value: editableData.dateofbirth,
+      placeholder: 'Chọn ngày sinh',
+      type: 'datepicker'
     },
     {
       label: 'Giới tính',
       field: 'gender',
       value: formatGenderForDisplay(editableData.gender),
       placeholder: 'Nam/Nữ',
-      keyboardType: 'default'
+      keyboardType: 'default',
+      type: 'input'
     }
   ];
 
@@ -179,14 +184,21 @@ export default function AccountScreen({ visible, onClose }) {
                 <View key={index} style={styles.fieldCard}>
                   <View style={styles.fieldContent}>
                     <Text style={styles.fieldLabel}>{field.label}</Text>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={field.value}
-                      placeholder={field.placeholder}
-                      placeholderTextColor={Colors.textMuted}
-                      keyboardType={field.keyboardType}
-                      onChangeText={(value) => updateField(field.field, value)}
-                    />
+                    {field.type === 'datepicker' ? (
+                      <DateOfBirthPicker
+                        value={field.value}
+                        onDateChange={(date) => updateField(field.field, date)}
+                      />
+                    ) : (
+                      <TextInput
+                        style={styles.fieldInput}
+                        value={field.value}
+                        placeholder={field.placeholder}
+                        placeholderTextColor={Colors.textMuted}
+                        keyboardType={field.keyboardType}
+                        onChangeText={(value) => updateField(field.field, value)}
+                      />
+                    )}
                   </View>
                 </View>
               ))}
