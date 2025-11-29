@@ -71,6 +71,8 @@ export async function fetchMedicinesFromBackend(pageNumber = 1, pageSize = 50) {
           imageUrl: item.imageurl,
           notes: item.notes,
           category: getTypeCategory(item.type),
+          strengthvalue: item.strengthvalue,
+          strengthUnit: item.strengthUnit,
         })),
         pagination: {
           pageNumber: result.data.pageNumber,
@@ -86,6 +88,66 @@ export async function fetchMedicinesFromBackend(pageNumber = 1, pageSize = 50) {
     }
   } catch (error) {
     return { success: false, error: 'Không thể tải danh sách thuốc từ server' };
+  }
+}
+
+// Fetch ALL medicines from backend by loading all pages
+export async function fetchAllMedicinesFromBackend(pageSize = 50) {
+  try {
+    console.log('=== LOADING ALL MEDICINES ===');
+    
+    // First, get the first page to know total pages
+    const firstPageResult = await fetchMedicinesFromBackend(1, pageSize);
+    
+    if (!firstPageResult.success) {
+      return { success: false, error: firstPageResult.error };
+    }
+    
+    const { totalPages } = firstPageResult.pagination;
+    console.log(`Total pages: ${totalPages}`);
+    
+    // If only 1 page, return immediately
+    if (totalPages <= 1) {
+      console.log(`✅ Loaded ${firstPageResult.medicines.length} medicines (1 page)`);
+      return {
+        success: true,
+        medicines: firstPageResult.medicines,
+        totalCount: firstPageResult.pagination.totalCount
+      };
+    }
+    
+    // Load remaining pages
+    const allMedicines = [...firstPageResult.medicines];
+    const pagePromises = [];
+    
+    for (let page = 2; page <= totalPages; page++) {
+      console.log(`Loading page ${page}/${totalPages}...`);
+      pagePromises.push(fetchMedicinesFromBackend(page, pageSize));
+    }
+    
+    // Wait for all pages to load
+    const results = await Promise.all(pagePromises);
+    
+    // Merge all results
+    results.forEach((result, index) => {
+      if (result.success) {
+        allMedicines.push(...result.medicines);
+        console.log(`✅ Loaded page ${index + 2}/${totalPages}: ${result.medicines.length} items`);
+      } else {
+        console.error(`❌ Failed to load page ${index + 2}:`, result.error);
+      }
+    });
+    
+    console.log(`✅ Total medicines loaded: ${allMedicines.length}`);
+    
+    return {
+      success: true,
+      medicines: allMedicines,
+      totalCount: allMedicines.length
+    };
+  } catch (error) {
+    console.error('Error loading all medicines:', error);
+    return { success: false, error: 'Không thể tải toàn bộ danh sách thuốc' };
   }
 }
 

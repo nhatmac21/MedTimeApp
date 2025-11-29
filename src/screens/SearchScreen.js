@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { getAllMedications, saveMedication } from '../services/storage';
-import { fetchMedicinesFromBackend, searchMedicinesFromBackend, addMedicineToBackend } from '../services/medicationsApi';
+import { fetchMedicinesFromBackend, fetchAllMedicinesFromBackend, searchMedicinesFromBackend, addMedicineToBackend } from '../services/medicationsApi';
 
 // Constants for dropdowns
 const MEDICINE_TYPES = [
@@ -107,16 +107,23 @@ export default function SearchScreen() {
   const loadPopularMedicines = async () => {
     try {
       setLoading(true);
-      const result = await fetchMedicinesFromBackend(1, 20);
+      console.log('Loading all medicines from backend...');
+      
+      // Load ALL pages from backend
+      const result = await fetchAllMedicinesFromBackend(50); // 50 items per page
+      
       if (result.success) {
+        console.log(`✅ Loaded ${result.medicines.length} medicines from backend`);
         setBackendMedicines(result.medicines);
         setFilteredMedications(result.medicines);
       } else {
         console.log('Error loading medicines from backend:', result.error);
+        Alert.alert('Lỗi', result.error || 'Không thể tải danh sách thuốc');
         setFilteredMedications([]);
       }
     } catch (error) {
       console.log('Error loading popular medicines:', error);
+      Alert.alert('Lỗi', 'Đã xảy ra lỗi khi tải danh sách thuốc');
       setFilteredMedications([]);
     } finally {
       setLoading(false);

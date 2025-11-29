@@ -462,11 +462,11 @@ export default function EditorScreen({ navigation }) {
                         const newMeds = [...prevMeds];
                         const currentItem = newMeds[index];
                         
-                        // Set the medication
+                        // Set the medication (null if clearing)
                         newMeds[index] = { ...currentItem, med: med };
                         
-                        // Auto-fill dosage if empty
-                        if (!currentItem.dosage || currentItem.dosage.trim() === '') {
+                        // Auto-fill dosage if empty and medicine is selected
+                        if (med && (!currentItem.dosage || currentItem.dosage.trim() === '')) {
                           if (med.strength) {
                             console.log('Auto-filling dosage with strength:', med.strength);
                             newMeds[index].dosage = med.strength;
@@ -476,17 +476,16 @@ export default function EditorScreen({ navigation }) {
                           }
                         }
                         
+                        // Clear dosage if medicine is cleared
+                        if (!med) {
+                          newMeds[index].dosage = '';
+                        }
+                        
                         console.log('Updated item:', newMeds[index]);
                         return newMeds;
                       });
                     }} 
                   />
-                  {medItem.med && (
-                    <View style={styles.selectedMedIndicator}>
-                      <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
-                      <Text style={styles.selectedMedText}>Đã chọn: {medItem.med.name}</Text>
-                    </View>
-                  )}
                 </View>
 
                 <View style={styles.dosageQuantityRow}>
