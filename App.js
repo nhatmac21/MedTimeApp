@@ -5,7 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import MainNavigator from './src/navigation/MainNavigator';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import { Colors } from './src/theme/colors';
-import { isLoggedIn } from './src/services/auth';
+import { isLoggedIn, refreshAccessToken } from './src/services/auth';
 import { initializeAudio, startMedicationMonitoring, stopMedicationMonitoring } from './src/services/alarmService';
 import { fetchMedicationsForDate } from './src/services/medicationsApi';
 
@@ -44,7 +44,23 @@ export default function App() {
       
       // Check login status
       const loggedIn = await isLoggedIn();
-      setIsAuthenticated(loggedIn);
+      
+      if (loggedIn) {
+        // Try to refresh access token if logged in
+        console.log('🔄 Attempting to refresh access token...');
+        const refreshResult = await refreshAccessToken();
+        
+        if (refreshResult.success) {
+          console.log('✅ Access token refreshed successfully');
+          setIsAuthenticated(true);
+        } else {
+          console.log('❌ Failed to refresh token:', refreshResult.error);
+          // If refresh fails, user needs to login again
+          setIsAuthenticated(false);
+        }
+      } else {
+        setIsAuthenticated(false);
+      }
     } catch (error) {
       console.log('Error initializing app:', error);
       setIsAuthenticated(false);

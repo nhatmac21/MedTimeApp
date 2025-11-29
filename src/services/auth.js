@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const API_BASE_URL = 'https://medtime-be.onrender.com/api';
 const CURRENT_USER_KEY = '@medtime_current_user';
 const TOKEN_KEY = '@medtime_token';
+const REFRESH_TOKEN_KEY = '@medtime_refresh_token';
 
 // API helper function
 const apiRequest = async (endpoint, options = {}) => {
@@ -191,7 +192,8 @@ export const loginUser = async (username, password) => {
         // Save tokens and user info
         await AsyncStorage.setItem(TOKEN_KEY, accessToken);
         if (refreshToken) {
-          await AsyncStorage.setItem('@medtime_refresh_token', refreshToken);
+          await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+          console.log('✅ Refresh token saved');
         }
         
         await AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify({
@@ -237,6 +239,8 @@ export const logoutUser = async () => {
   try {
     await AsyncStorage.removeItem(CURRENT_USER_KEY);
     await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+    console.log('✅ Logged out and cleared all tokens');
     return true;
   } catch (error) {
     console.log('Error logging out:', error);
@@ -294,10 +298,73 @@ export const getAuthToken = async () => {
 // Get refresh token
 export const getRefreshToken = async () => {
   try {
-    return await AsyncStorage.getItem('@medtime_refresh_token');
+    return await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
   } catch (error) {
     console.log('Error getting refresh token:', error);
     return null;
+  }
+};
+
+// Refresh access token using refresh token
+export const refreshAccessToken = async () => {
+  try {
+    const currentAccessToken = await AsyncStorage.getItem(TOKEN_KEY);
+    const currentRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+    
+    if (!currentAccessToken || !currentRefreshToken) {
+      console.log('❌ No tokens found for refresh');
+      return { success: false, error: 'No tokens available' };
+    }
+
+    console.log('=== REFRESHING ACCESS TOKEN ===');
+    
+    const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentAccessToken}`,
+      },
+      body: JSON.stringify({
+        accessToken: currentAccessToken,
+        refreshToken: currentRefreshToken,
+      }),
+    });
+
+    console.log('Refresh token response status:', response.status);
+
+    if (!response.ok) {
+      console.log('❌ Refresh token failed:', response.status);
+      // If refresh fails, clear tokens and require re-login
+      await AsyncStorage.removeItem(TOKEN_KEY);
+      await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+      await AsyncStorage.removeItem(CURRENT_USER_KEY);
+      return { success: false, error: 'Session expired, please login again' };
+    }
+
+    const data = await response.json();
+    console.log('Refresh token response data:', data);
+
+    if (data.success && data.data) {
+      const { accessToken: newAccessToken, refreshToken: newRefreshToken } = data.data;
+      
+      if (newAccessToken) {
+        await AsyncStorage.setItem(TOKEN_KEY, newAccessToken);
+        console.log('✅ New access token saved');
+      }
+      
+      if (newRefreshToken) {
+        await AsyncStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
+        console.log('✅ New refresh token saved');
+      }
+      
+      return { success: true, accessToken: newAccessToken };
+    } else {
+      console.log('❌ Invalid refresh token response');
+      return { success: false, error: 'Invalid refresh token response' };
+    }
+  } catch (error) {
+    console.log('❌ Error refreshing token:', error);
+    return { success: false, error: 'Failed to refresh token' };
   }
 };
 
