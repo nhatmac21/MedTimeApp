@@ -207,7 +207,10 @@ export default function CaregiverScreen({ onLogout }) {
 
           {/* Lịch sử thanh toán (chỉ hiện khi đã premium) */}
           {isPremium && (
-            <TouchableOpacity style={styles.card}>
+            <TouchableOpacity 
+              style={styles.card}
+              onPress={() => navigation.navigate('PaymentHistory')}
+            >
               <View style={styles.cardContent}>
                 <View style={styles.iconContainer}>
                   <Ionicons name="receipt-outline" size={28} color={Colors.primary} />
