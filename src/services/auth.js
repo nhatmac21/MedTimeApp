@@ -441,7 +441,7 @@ export const linkGuardian = async (uniquecode) => {
 
 export const getGuardianLinks = async () => {
   try {
-    const result = await apiRequest('/guardianlink', {
+    const result = await apiRequest('/guardianlink/my-patients', {
       method: 'GET',
     });
     
@@ -449,6 +449,22 @@ export const getGuardianLinks = async () => {
       return { success: true, data: result.data };
     } else {
       return { success: false, error: result.error || 'Không thể tải danh sách người giám sát' };
+    }
+  } catch (error) {
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
+export const getMyGuardians = async () => {
+  try {
+    const result = await apiRequest('/guardianlink/my-guardians', {
+      method: 'GET',
+    });
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể tải danh sách người giám hộ' };
     }
   } catch (error) {
     return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };

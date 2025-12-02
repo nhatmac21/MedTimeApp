@@ -13,17 +13,18 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { logoutUser, getCurrentUser, linkGuardian, getGuardianLinks } from '../services/auth';
+import { logoutUser, getCurrentUser, linkGuardian, getGuardianLinks, getMyGuardians } from '../services/auth';
 import SettingsScreen from './SettingsScreen';
 import { useNavigation } from '@react-navigation/native';
 
 export default function CaregiverScreen({ onLogout }) {
   const navigation = useNavigation();
-  const [currentView, setCurrentView] = useState('tab'); // 'tab', 'monitoring', 'enterCode'
+  const [currentView, setCurrentView] = useState('tab'); // 'tab', 'monitoring', 'enterCode', 'myGuardians'
   const [searchCode, setSearchCode] = useState('');
   const [userInfo, setUserInfo] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [guardianLinks, setGuardianLinks] = useState([]);
+  const [myGuardians, setMyGuardians] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
 
@@ -44,14 +45,42 @@ export default function CaregiverScreen({ onLogout }) {
     setLoading(true);
     try {
       const result = await getGuardianLinks();
-      if (result.success && result.data?.items) {
-        setGuardianLinks(result.data.items);
+      console.log('Guardian Links Result:', result);
+      
+      if (result.success && result.data) {
+        // Backend returns array directly in data, not data.items
+        const patients = Array.isArray(result.data) ? result.data : [];
+        console.log('Patients to display:', patients);
+        setGuardianLinks(patients);
       } else {
+        console.log('No guardian links found');
         setGuardianLinks([]);
       }
     } catch (error) {
       console.log('Error loading guardian links:', error);
       setGuardianLinks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMyGuardians = async () => {
+    setLoading(true);
+    try {
+      const result = await getMyGuardians();
+      console.log('My Guardians Result:', result);
+      
+      if (result.success && result.data) {
+        const guardians = Array.isArray(result.data) ? result.data : [];
+        console.log('Guardians to display:', guardians);
+        setMyGuardians(guardians);
+      } else {
+        console.log('No guardians found');
+        setMyGuardians([]);
+      }
+    } catch (error) {
+      console.log('Error loading guardians:', error);
+      setMyGuardians([]);
     } finally {
       setLoading(false);
     }
@@ -156,7 +185,13 @@ export default function CaregiverScreen({ onLogout }) {
           )}
           
           {/* Giám hộ của bạn Card */}
-          <TouchableOpacity style={styles.card}>
+          <TouchableOpacity 
+            style={styles.card}
+            onPress={() => {
+              loadMyGuardians();
+              setCurrentView('myGuardians');
+            }}
+          >
             <View style={styles.cardContent}>
               <View style={styles.iconContainer}>
                 <Ionicons name="people-outline" size={28} color={Colors.primary} />
@@ -288,13 +323,13 @@ export default function CaregiverScreen({ onLogout }) {
               <Text style={styles.emptyStateSubtext}>Nhấn nút "Thêm" để thêm người giám sát</Text>
             </View>
           ) : (
-            guardianLinks.map((guardian, index) => (
+            guardianLinks.map((patient, index) => (
               <TouchableOpacity key={index} style={styles.guardianCard}>
                 <View style={styles.guardianInfo}>
-                  <Text style={styles.guardianName}>Người giám sát {guardian.guardianFullname}</Text>
-                
+                  <Text style={styles.guardianName}>{patient.patientFullname}</Text>
+                 
                   <Text style={styles.guardianDate}>
-                    Liên kết: {new Date(guardian.createdat).toLocaleDateString('vi-VN')}
+                    Liên kết: {new Date(patient.createdat).toLocaleDateString('vi-VN')}
                   </Text>
                 </View>
                 <View style={styles.guardianAvatar}>
@@ -313,6 +348,85 @@ export default function CaregiverScreen({ onLogout }) {
           <Ionicons name="add" size={24} color={Colors.white} />
           <Text style={styles.addButtonText}>Thêm</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* FAB */}
+      <TouchableOpacity style={styles.fab}>
+        <View style={styles.fabContent}>
+          <Ionicons name="people" size={20} color={Colors.white} />
+          <Text style={styles.fabText}>Giám hộ</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderMyGuardiansScreen = () => (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* Header */}
+      <LinearGradient
+        colors={[Colors.primary, Colors.primaryDark]}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => setCurrentView('tab')}
+          >
+            <Ionicons name="chevron-back" size={24} color={Colors.white} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Giám hộ của bạn</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              style={styles.refreshButton} 
+              onPress={loadMyGuardians}
+              disabled={loading}
+            >
+              <Ionicons 
+                name="refresh-outline" 
+                size={22} 
+                color={loading ? Colors.textMuted : Colors.white} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.settingsButton} onPress={() => setShowSettings(true)}>
+              <Ionicons name="settings-outline" size={24} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </LinearGradient>
+
+      {/* Content */}
+      <View style={styles.content}>
+        {/* Guardian Cards */}
+        <ScrollView style={styles.guardianList} showsVerticalScrollIndicator={false}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Đang tải...</Text>
+            </View>
+          ) : myGuardians.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color={Colors.textMuted} />
+              <Text style={styles.emptyStateText}>Chưa có người giám hộ</Text>
+              <Text style={styles.emptyStateSubtext}>Chia sẻ mã giám sát của bạn để được giám hộ</Text>
+            </View>
+          ) : (
+            myGuardians.map((guardian, index) => (
+              <TouchableOpacity key={index} style={styles.guardianCard}>
+                <View style={styles.guardianInfo}>
+                  <Text style={styles.guardianName}>{guardian.guardianFullname}</Text>
+                  
+                  <Text style={styles.guardianDate}>
+                    Liên kết: {new Date(guardian.createdat).toLocaleDateString('vi-VN')}
+                  </Text>
+                </View>
+                <View style={styles.guardianAvatar}>
+                  <Ionicons name="shield-checkmark" size={24} color={Colors.primary} />
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
       </View>
 
       {/* FAB */}
@@ -389,6 +503,7 @@ export default function CaregiverScreen({ onLogout }) {
     <>
       {currentView === 'tab' && renderTabScreen()}
       {currentView === 'monitoring' && renderMonitoringScreen()}
+      {currentView === 'myGuardians' && renderMyGuardiansScreen()}
       {currentView === 'enterCode' && renderEnterCodeScreen()}
       
       <SettingsScreen
