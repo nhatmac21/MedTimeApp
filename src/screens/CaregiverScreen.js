@@ -324,10 +324,14 @@ export default function CaregiverScreen({ onLogout }) {
             </View>
           ) : (
             guardianLinks.map((patient, index) => (
-              <TouchableOpacity key={index} style={styles.guardianCard}>
+              <TouchableOpacity 
+                key={index} 
+                style={styles.guardianCard}
+                onPress={() => navigation.navigate('PatientDetail', { patient })}
+              >
                 <View style={styles.guardianInfo}>
                   <Text style={styles.guardianName}>{patient.patientFullname}</Text>
-                 
+                  <Text style={styles.guardianRole}>ID: {patient.patientid}</Text>
                   <Text style={styles.guardianDate}>
                     Liên kết: {new Date(patient.createdat).toLocaleDateString('vi-VN')}
                   </Text>

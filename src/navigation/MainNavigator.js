@@ -4,6 +4,9 @@ import RootNavigator from './RootNavigator';
 import PremiumScreen from '../screens/PremiumScreen';
 import PaymentScreen from '../screens/PaymentScreen';
 import PaymentHistoryScreen from '../screens/PaymentHistoryScreen';
+import PatientDetailScreen from '../screens/PatientDetailScreen';
+import GuardianEditorScreen from '../screens/GuardianEditorScreen';
+import EditorStackNavigator from './EditorStackNavigator';
 
 const Stack = createStackNavigator();
 
@@ -34,6 +37,24 @@ export default function MainNavigator({ onLogout }) {
       <Stack.Screen 
         name="PaymentHistory" 
         component={PaymentHistoryScreen}
+        options={{
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen 
+        name="PatientDetail" 
+        component={PatientDetailScreen}
+      />
+      <Stack.Screen 
+        name="GuardianEditor" 
+        component={GuardianEditorScreen}
+        options={{
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen 
+        name="Editor" 
+        component={EditorStackNavigator}
         options={{
           presentation: 'modal',
         }}
