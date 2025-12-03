@@ -232,6 +232,7 @@ export default function GuardianEditorScreen({ navigation, route }) {
         startdate: selectedMed.startDate,
         enddate: selectedMed.endDate,
         remainingquantity: parseInt(selectedMed.quantity) || 1,
+        doctorname: '',
         notes: selectedMed.notes || '',
       };
 

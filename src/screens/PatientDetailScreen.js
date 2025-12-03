@@ -48,9 +48,6 @@ export default function PatientDetailScreen({ route, navigation }) {
           medicineMap[med.medicineid] = med;
         });
         setMedicines(medicineMap);
-        console.log('Medicine map created:', Object.keys(medicineMap).length, 'medicines');
-        console.log('Sample medicine fields:', Object.keys(medicineMap[1] || {}));
-        console.log('Sample medicine full:', medicineMap[1]);
       }
 
       // Load prescriptions for patient
@@ -106,8 +103,6 @@ export default function PatientDetailScreen({ route, navigation }) {
         );
 
         const medicine = medicineMap[prescription.medicineid];
-
-        console.log(`Prescription ${prescription.prescriptionid}: medicineid=${prescription.medicineid}, medicine=`, medicine);
 
         // Only add one entry per prescription, with all schedules
         if (prescriptionSchedules.length > 0) {
@@ -169,7 +164,7 @@ export default function PatientDetailScreen({ route, navigation }) {
   const handleDelete = async (medication) => {
     Alert.alert(
       'Xóa nhắc nhở',
-      `Bạn có chắc chắn muốn xóa nhắc nhở "${medication.medicine?.medicinename || 'thuốc này'}"?`,
+      `Bạn có chắc chắn muốn xóa nhắc nhở "${medication.medicine?.name || 'thuốc này'}"?`,
       [
         {
           text: 'Hủy',
@@ -283,7 +278,7 @@ export default function PatientDetailScreen({ route, navigation }) {
             dayMedications.map((medication, medIndex) => (
               <MedicationCard
                 key={medIndex}
-                name={medication.medicine?.medicinename || 'Không rõ tên'}
+                name={medication.medicine?.name || 'Không rõ tên'}
                 dosage={medication.dosage || ''}
                 quantity={`${medication.frequencyperday || 1} lần/ngày`}
                 status="pending"
