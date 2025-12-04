@@ -362,7 +362,14 @@ export default function HomeScreen({ navigation, route, onLogout }) {
   const handleAlarmDismiss = async () => {
     console.log('HomeScreen: Dismissing alarm modal');
     
-    // Stop alarm sound first
+    // Log intake in background (don't wait for result)
+    if (alarmMedication && alarmMedication.prescriptionId && alarmMedication.scheduleId) {
+      logIntake(alarmMedication.prescriptionId, alarmMedication.scheduleId).catch(err => {
+        console.error('Error logging intake:', err);
+      });
+    }
+    
+    // Stop alarm sound (independent of API call)
     await stopAlarmSound();
     
     // Close modal and clear state
@@ -370,6 +377,29 @@ export default function HomeScreen({ navigation, route, onLogout }) {
     setAlarmMedication(null);
     
     console.log('HomeScreen: Alarm dismissed successfully');
+  };
+
+  const logIntake = async (prescriptionId, scheduleId) => {
+    try {
+      console.log(`Logging intake for prescription ${prescriptionId}, schedule ${scheduleId}`);
+      
+      const result = await createIntakeLog({
+        prescriptionid: prescriptionId,
+        scheduleid: scheduleId,
+        actiontime: new Date().toISOString(),
+        action: 'taken',
+        confirmedBy: 'user',
+        notes: '',
+      });
+
+      if (result.success) {
+        console.log('Intake logged successfully');
+      } else {
+        console.log('Failed to log intake:', result.error);
+      }
+    } catch (error) {
+      console.error('Error in logIntake:', error);
+    }
   };
 
   if (loading) {
