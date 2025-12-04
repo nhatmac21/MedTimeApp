@@ -14,9 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import MedicationPicker from '../components/MedicationPicker';
-import TimePicker from '../components/TimePicker';
 import AlarmSoundPicker from '../components/AlarmSoundPicker';
-import RepeatPatternPicker from '../components/RepeatPatternPicker';
+import DatePicker from '../components/DatePicker';
 import { getAuthToken } from '../services/auth';
 import dayjs from 'dayjs';
 
@@ -33,14 +32,8 @@ export default function GuardianEditorScreen({ navigation, route }) {
     notes: '',
     startDate: dayjs().format('YYYY-MM-DD'),
     endDate: dayjs().add(30, 'day').format('YYYY-MM-DD'),
-    alarmSound: 'alarm1'
-  });
-  const [times, setTimes] = useState(['08:00']);
-  const [repeatPattern, setRepeatPattern] = useState({
-    pattern: 'DAILY',
-    interval: 1,
-    dayOfWeek: null,
-    dayOfMonth: null,
+    alarmSound: 'alarm1',
+    frequency: 1,
   });
   const [loading, setLoading] = useState(false);
 
@@ -54,42 +47,14 @@ export default function GuardianEditorScreen({ navigation, route }) {
         notes: medication.notes || '',
         startDate: medication.startdate ? dayjs(medication.startdate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
         endDate: medication.enddate ? dayjs(medication.enddate).format('YYYY-MM-DD') : dayjs().add(30, 'day').format('YYYY-MM-DD'),
-        alarmSound: medication.prescriptionschedule?.customringtone || 'alarm1'
+        alarmSound: medication.prescriptionschedule?.customringtone || 'alarm1',
+        frequency: medication.frequencyperday || 1,
       });
-
-      if (medication.prescriptionschedule) {
-        const schedule = medication.prescriptionschedule;
-        setTimes([schedule.timeofday || '08:00']);
-        setRepeatPattern({
-          pattern: schedule.repeatpattern?.toUpperCase() || 'DAILY',
-          interval: schedule.interval || 1,
-          dayOfWeek: schedule.dayofweek,
-          dayOfMonth: schedule.dayofmonth,
-        });
-      }
     }
   }, [mode, medication]);
 
   const updateMedField = (field, value) => {
     setSelectedMed(prev => ({ ...prev, [field]: value }));
-  };
-
-  const updateTime = (index, value) => {
-    const newTimes = [...times];
-    newTimes[index] = value;
-    setTimes(newTimes);
-  };
-
-  const addTimeSlot = () => {
-    if (times.length < 4) {
-      setTimes([...times, '08:00']);
-    }
-  };
-
-  const removeTime = (index) => {
-    if (times.length > 1) {
-      setTimes(times.filter((_, i) => i !== index));
-    }
   };
 
   const validateForm = () => {
@@ -99,10 +64,6 @@ export default function GuardianEditorScreen({ navigation, route }) {
     }
     if (!selectedMed.dosage) {
       Alert.alert('Lỗi', 'Vui lòng nhập liều lượng');
-      return false;
-    }
-    if (times.some(t => !t)) {
-      Alert.alert('Lỗi', 'Vui lòng chọn đầy đủ thời gian nhắc nhở');
       return false;
     }
     return true;
@@ -160,60 +121,7 @@ export default function GuardianEditorScreen({ navigation, route }) {
     }
   };
 
-  const createScheduleForPatient = async (prescriptionId, scheduleData) => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/prescriptionschedule`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          prescriptionid: prescriptionId,
-          ...scheduleData
-        }),
-      });
 
-      const data = await response.json();
-      console.log('Create Schedule Response:', data);
-
-      if (data.success) {
-        return { success: true, data: data.data };
-      } else {
-        return { success: false, error: data.message || 'Không thể tạo lịch trình' };
-      }
-    } catch (error) {
-      console.log('Create Schedule Error:', error);
-      return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
-    }
-  };
-
-  const updateScheduleForPatient = async (scheduleId, scheduleData) => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/prescriptionschedule/${scheduleId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(scheduleData),
-      });
-
-      const data = await response.json();
-      console.log('Update Schedule Response:', data);
-
-      if (data.success) {
-        return { success: true, data: data.data };
-      } else {
-        return { success: false, error: data.message || 'Không thể cập nhật lịch trình' };
-      }
-    } catch (error) {
-      console.log('Update Schedule Error:', error);
-      return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
-    }
-  };
 
   const handleSave = async () => {
     if (!validateForm()) return;
@@ -228,7 +136,7 @@ export default function GuardianEditorScreen({ navigation, route }) {
       const prescriptionData = {
         medicineid: selectedMed.med.medicineid,
         dosage: selectedMed.dosage,
-        frequencyperday: times.length,
+        frequencyperday: selectedMed.frequency,
         startdate: selectedMed.startDate,
         enddate: selectedMed.endDate,
         remainingquantity: parseInt(selectedMed.quantity) || 1,
@@ -239,7 +147,6 @@ export default function GuardianEditorScreen({ navigation, route }) {
       console.log('Prescription Data:', prescriptionData);
 
       let prescriptionResult;
-      let prescriptionId;
 
       if (mode === 'edit' && medication) {
         // Update existing prescription
@@ -247,11 +154,9 @@ export default function GuardianEditorScreen({ navigation, route }) {
           medication.prescriptionid,
           prescriptionData
         );
-        prescriptionId = medication.prescriptionid;
       } else {
         // Create new prescription
         prescriptionResult = await createPrescriptionForPatient(prescriptionData);
-        prescriptionId = prescriptionResult.data?.prescriptionid;
       }
 
       if (!prescriptionResult.success) {
@@ -260,44 +165,11 @@ export default function GuardianEditorScreen({ navigation, route }) {
         return;
       }
 
-      console.log('Prescription saved, ID:', prescriptionId);
-
-      // Create/Update schedules for each time
-      for (let i = 0; i < times.length; i++) {
-        const scheduleData = {
-          timeofday: times[i],
-          interval: repeatPattern.interval,
-          dayofmonth: repeatPattern.dayOfMonth,
-          repeatpattern: repeatPattern.pattern.toLowerCase(),
-          dayofweek: repeatPattern.dayOfWeek,
-          notificationenabled: true,
-          customringtone: selectedMed.alarmSound,
-        };
-
-        console.log(`Creating/Updating schedule ${i + 1}:`, scheduleData);
-
-        let scheduleResult;
-        if (mode === 'edit' && medication?.prescriptionschedule) {
-          // Update existing schedule
-          scheduleResult = await updateScheduleForPatient(
-            medication.prescriptionschedule.scheduleid,
-            scheduleData
-          );
-        } else {
-          // Create new schedule
-          scheduleResult = await createScheduleForPatient(prescriptionId, scheduleData);
-        }
-
-        if (!scheduleResult.success) {
-          console.log(`Schedule ${i + 1} failed:`, scheduleResult.error);
-        }
-      }
-
       Alert.alert(
         'Thành công',
         mode === 'edit' 
-          ? `Đã cập nhật nhắc nhở cho ${patient.patientFullname}`
-          : `Đã tạo nhắc nhở cho ${patient.patientFullname}`,
+          ? `Đã cập nhật đơn thuốc cho ${patient.patientFullname}`
+          : `Đã tạo đơn thuốc cho ${patient.patientFullname}. Vui lòng thiết lập lịch nhắc nhở trong màn hình chi tiết.`,
         [
           {
             text: 'OK',
@@ -308,7 +180,7 @@ export default function GuardianEditorScreen({ navigation, route }) {
 
     } catch (error) {
       console.log('Save Error:', error);
-      Alert.alert('Lỗi', 'Đã xảy ra lỗi khi lưu nhắc nhở');
+      Alert.alert('Lỗi', 'Đã xảy ra lỗi khi lưu đơn thuốc');
     } finally {
       setLoading(false);
     }
@@ -344,129 +216,171 @@ export default function GuardianEditorScreen({ navigation, route }) {
           
           {/* Medicine Selection */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Chọn thuốc</Text>
-            <MedicationPicker
-              selectedMed={selectedMed.med}
-              onSelect={(med) => updateMedField('med', med)}
-            />
+            <Text style={styles.label}>Chọn thuốc cần nhắc nhở</Text>
+            <Text style={styles.hintText}>💡 Nhấn vào "Chọn thuốc" để tìm và chọn thuốc từ danh sách</Text>
+            <View style={styles.medicationPickerContainer}>
+              <MedicationPicker
+                selectedMed={selectedMed.med}
+                onSelect={(med) => {
+                  console.log('GuardianEditorScreen onSelect:', med);
+                  // Auto-fill dosage if medicine is selected
+                  if (med && (!selectedMed.dosage || selectedMed.dosage.trim() === '')) {
+                    if (med.strength) {
+                      updateMedField('dosage', med.strength);
+                    } else if (med.dosages && med.dosages.length > 0) {
+                      updateMedField('dosage', med.dosages[0]);
+                    }
+                  }
+                  // Clear dosage if medicine is cleared
+                  if (!med) {
+                    updateMedField('dosage', '');
+                  }
+                  updateMedField('med', med);
+                }}
+              />
+            </View>
+
+            {/* Medicine Details */}
+            {selectedMed.med && (
+              <View style={styles.medicineDetails}>
+                {selectedMed.med.type && (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="flask-outline" size={16} color={Colors.textMuted} />
+                    <Text style={styles.detailText}>Loại: {selectedMed.med.type}</Text>
+                  </View>
+                )}
+                {selectedMed.med.category && (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="medical-outline" size={16} color={Colors.textMuted} />
+                    <Text style={styles.detailText}>Danh mục: {selectedMed.med.category}</Text>
+                  </View>
+                )}
+                {selectedMed.med.notes && (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="information-circle-outline" size={16} color={Colors.textMuted} />
+                    <Text style={styles.detailText}>{selectedMed.med.notes}</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
 
-          {/* Dosage */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Liều lượng</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="VD: 1 viên, 5ml, 2 gói..."
-              placeholderTextColor={Colors.textMuted}
-              value={selectedMed.dosage}
-              onChangeText={(text) => updateMedField('dosage', text)}
-            />
+          {/* Dosage and Quantity */}
+          <View style={styles.dosageQuantityRow}>
+            <View style={styles.dosageContainer}>
+              <Text style={styles.subLabel}>Liều lượng</Text>
+              <TextInput
+                style={styles.dosageInput}
+                value={selectedMed.dosage || ''}
+                onChangeText={(text) => updateMedField('dosage', text)}
+                placeholder="Ví dụ: 500mg"
+              />
+              {selectedMed.med && selectedMed.med.dosages && selectedMed.med.dosages.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dosageOptions}>
+                  {selectedMed.med.dosages.map((d, i) => (
+                    <TouchableOpacity 
+                      key={i} 
+                      style={[styles.dosageChip, selectedMed.dosage === d && styles.selectedDosageChip]}
+                      onPress={() => updateMedField('dosage', d)}
+                    >
+                      <Text style={[styles.dosageChipText, selectedMed.dosage === d && styles.selectedDosageText]}>
+                        {d}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+
+            <View style={styles.quantityContainer}>
+              <Text style={styles.subLabel}>Số lượng</Text>
+              <TextInput
+                style={styles.quantityInput}
+                value={selectedMed.quantity || '1'}
+                onChangeText={(text) => updateMedField('quantity', text)}
+                placeholder="1"
+                keyboardType="numeric"
+              />
+            </View>
           </View>
 
-          {/* Quantity */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Số lượng còn lại</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Số lượng"
-              placeholderTextColor={Colors.textMuted}
-              keyboardType="numeric"
-              value={selectedMed.quantity}
-              onChangeText={(text) => updateMedField('quantity', text)}
-            />
+          {/* Start and End Date */}
+          <View style={styles.dateRow}>
+            <View style={styles.dateContainer}>
+              <DatePicker
+                label="Ngày bắt đầu"
+                value={selectedMed.startDate}
+                onDateChange={(date) => updateMedField('startDate', date)}
+                minDate={dayjs().format('YYYY-MM-DD')}
+              />
+            </View>
+
+            <View style={styles.dateContainer}>
+              <DatePicker
+                label="Ngày kết thúc"
+                value={selectedMed.endDate}
+                onDateChange={(date) => updateMedField('endDate', date)}
+                minDate={selectedMed.startDate || dayjs().format('YYYY-MM-DD')}
+              />
+            </View>
           </View>
 
-          {/* Start Date */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Ngày bắt đầu</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={Colors.textMuted}
-              value={selectedMed.startDate}
-              onChangeText={(text) => updateMedField('startDate', text)}
-            />
-          </View>
-
-          {/* End Date */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Ngày kết thúc</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={Colors.textMuted}
-              value={selectedMed.endDate}
-              onChangeText={(text) => updateMedField('endDate', text)}
-            />
+          {/* Frequency */}
+          <View style={styles.frequencySection}>
+            <Text style={styles.subLabel}>Tần suất/ngày (tối đa 4 lần)</Text>
+            <View style={styles.frequencyOptions}>
+              {[1, 2, 3, 4].map((freq) => (
+                <TouchableOpacity
+                  key={freq}
+                  style={[
+                    styles.frequencyChip,
+                    selectedMed.frequency === freq && styles.selectedFrequencyChip
+                  ]}
+                  onPress={() => updateMedField('frequency', freq)}
+                >
+                  <Ionicons 
+                    name="time-outline" 
+                    size={18} 
+                    color={selectedMed.frequency === freq ? Colors.white : Colors.primary} 
+                  />
+                  <Text style={[
+                    styles.frequencyChipText,
+                    selectedMed.frequency === freq && styles.selectedFrequencyText
+                  ]}>
+                    {freq} lần
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Notes */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Ghi chú</Text>
+          <View style={styles.notesContainer}>
+            <Text style={styles.subLabel}>Ghi chú</Text>
             <TextInput
-              style={[styles.input, styles.notesInput]}
-              placeholder="VD: Uống sau ăn, tránh ánh nắng..."
-              placeholderTextColor={Colors.textMuted}
+              style={styles.notesInput}
+              value={selectedMed.notes || ''}
+              onChangeText={(text) => updateMedField('notes', text)}
+              placeholder="Thêm ghi chú về cách dùng thuốc..."
               multiline
               numberOfLines={3}
-              value={selectedMed.notes}
-              onChangeText={(text) => updateMedField('notes', text)}
             />
-          </View>
-
-          {/* Repeat Pattern */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Tần suất nhắc nhở</Text>
-            <RepeatPatternPicker
-              selectedPattern={repeatPattern.pattern}
-              interval={repeatPattern.interval}
-              dayOfWeek={repeatPattern.dayOfWeek}
-              dayOfMonth={repeatPattern.dayOfMonth}
-              onPatternChange={(data) => setRepeatPattern(data)}
-            />
-          </View>
-
-          {/* Time Slots */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mốc giờ nhắc nhở</Text>
-            {times.map((time, index) => (
-              <View key={index} style={styles.timeRow}>
-                <View style={styles.timePickerWrapper}>
-                  <TimePicker
-                    label={`Lần ${index + 1}`}
-                    value={time}
-                    onTimeChange={(t) => updateTime(index, t)}
-                  />
-                </View>
-                {times.length > 1 && (
-                  <TouchableOpacity 
-                    style={styles.removeTimeBtn} 
-                    onPress={() => removeTime(index)}
-                  >
-                    <Ionicons name="close-circle" size={24} color={Colors.danger} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-            
-            {times.length < 4 && (
-              <TouchableOpacity 
-                style={styles.addTimeBtn} 
-                onPress={addTimeSlot}
-              >
-                <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
-                <Text style={styles.addTimeText}>Thêm mốc giờ</Text>
-              </TouchableOpacity>
-            )}
           </View>
 
           {/* Alarm Sound */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Âm thanh nhắc nhở</Text>
+            <Text style={styles.subLabel}>Âm thanh nhắc nhở</Text>
             <AlarmSoundPicker
               selectedSound={selectedMed.alarmSound}
-              onSoundSelect={(sound) => updateMedField('alarmSound', sound)}
+              onSoundSelect={(sound) => updateMedField('alarmSound', sound.id)}
             />
+          </View>
+
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color={Colors.primary} />
+            <Text style={styles.infoText}>
+              Sau khi lưu, bạn có thể thiết lập lịch nhắc nhở trong màn hình chi tiết bệnh nhân.
+            </Text>
           </View>
 
         </ScrollView>
@@ -479,7 +393,7 @@ export default function GuardianEditorScreen({ navigation, route }) {
             disabled={loading}
           >
             <Text style={styles.saveBtnText}>
-              {loading ? 'Đang lưu...' : (mode === 'edit' ? 'Cập nhật' : 'Lưu và đặt nhắc nhở')}
+              {loading ? 'Đang lưu...' : (mode === 'edit' ? 'Cập nhật đơn thuốc' : 'Tạo đơn thuốc')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -538,7 +452,48 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary, 
     marginBottom: 8 
   },
-  input: {
+  subLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: 8,
+  },
+  hintText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  medicationPickerContainer: {
+    marginBottom: 12,
+  },
+  medicineDetails: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  detailText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginLeft: 8,
+  },
+  dosageQuantityRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    gap: 12,
+  },
+  dosageContainer: {
+    flex: 2,
+  },
+  dosageInput: {
     backgroundColor: Colors.card,
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -548,36 +503,111 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  notesInput: {
-    minHeight: 80,
-    textAlignVertical: 'top',
+  dosageOptions: {
+    marginTop: 8,
+    maxHeight: 40,
   },
-  timeRow: { 
-    flexDirection: 'row', 
-    alignItems: 'flex-end', 
-    marginBottom: 16 
+  dosageChip: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
   },
-  timePickerWrapper: { 
-    flex: 1 
+  selectedDosageChip: {
+    backgroundColor: Colors.primary,
   },
-  removeTimeBtn: { 
-    marginLeft: 12, 
-    marginBottom: 12 
+  dosageChipText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '500',
   },
-  addTimeBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center',
+  selectedDosageText: {
+    color: Colors.white,
+  },
+  quantityContainer: {
+    flex: 1,
+  },
+  quantityInput: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
     paddingVertical: 12,
+    fontSize: 16,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    textAlign: 'center',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    gap: 12,
+  },
+  dateContainer: {
+    flex: 1,
+  },
+  frequencySection: {
+    marginBottom: 20,
+  },
+  frequencyOptions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  frequencyChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.primary,
     borderRadius: 12,
-    borderStyle: 'dashed'
+    paddingVertical: 12,
+    gap: 6,
   },
-  addTimeText: { 
-    marginLeft: 8, 
-    color: Colors.primary, 
-    fontWeight: '500' 
+  selectedFrequencyChip: {
+    backgroundColor: Colors.primary,
+  },
+  frequencyChipText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  selectedFrequencyText: {
+    color: Colors.white,
+  },
+  notesContainer: {
+    marginBottom: 20,
+  },
+  notesInput: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    gap: 12,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.primary,
+    lineHeight: 20,
   },
   footer: { 
     padding: 20, 

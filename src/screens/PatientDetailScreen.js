@@ -8,11 +8,14 @@ import {
   ScrollView,
   Alert,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import MedicationCard from '../components/MedicationCard';
+import TimePicker from '../components/TimePicker';
+import RepeatPatternPicker from '../components/RepeatPatternPicker';
 import { getAuthToken, getMedicines } from '../services/auth';
 
 const API_BASE_URL = 'https://medtime-be.onrender.com/api';
@@ -28,6 +31,15 @@ export default function PatientDetailScreen({ route, navigation }) {
   const [medicines, setMedicines] = useState({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [editingTime, setEditingTime] = useState('08:00');
+  const [editingRepeatPattern, setEditingRepeatPattern] = useState({
+    pattern: 'DAILY',
+    interval: 1,
+    dayOfWeek: null,
+    dayOfMonth: null,
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -200,6 +212,68 @@ export default function PatientDetailScreen({ route, navigation }) {
     );
   };
 
+  const handleEditTime = (medication) => {
+    if (!medication.prescriptionschedule) {
+      Alert.alert('Lỗi', 'Không tìm thấy thông tin lịch nhắc nhở');
+      return;
+    }
+    const schedule = medication.prescriptionschedule;
+    const currentTime = schedule.timeofday || '08:00:00';
+    setEditingSchedule(schedule);
+    setEditingTime(currentTime.substring(0, 5)); // HH:MM format
+    setEditingRepeatPattern({
+      pattern: schedule.repeatpattern?.toUpperCase() || 'DAILY',
+      interval: schedule.interval || 1,
+      dayOfWeek: schedule.dayofweek,
+      dayOfMonth: schedule.dayofmonth,
+    });
+    setShowEditModal(true);
+  };
+
+  const updateScheduleTime = async () => {
+    if (!editingSchedule) return;
+
+    try {
+      const token = await getAuthToken();
+      const scheduleId = editingSchedule.scheduleid;
+      
+      const payload = {
+        timeofday: `${editingTime}:00`,
+        interval: editingRepeatPattern.interval,
+        dayofmonth: editingRepeatPattern.dayOfMonth,
+        repeatPattern: editingRepeatPattern.pattern.toLowerCase(),
+        dayOfWeek: editingRepeatPattern.dayOfWeek,
+        notificationenabled: editingSchedule.notificationenabled !== false,
+        customringtone: editingSchedule.customringtone || 'alarm1',
+      };
+
+      const response = await fetch(
+        `${API_BASE_URL}/prescriptionschedule/${scheduleId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        Alert.alert('Thành công', 'Đã cập nhật lịch nhắc nhở');
+        setShowEditModal(false);
+        loadMedications(); // Reload to show updated time
+      } else {
+        Alert.alert('Lỗi', data.message || 'Không thể cập nhật lịch nhắc nhở');
+      }
+    } catch (error) {
+      console.log('Update schedule error:', error);
+      Alert.alert('Lỗi', 'Đã xảy ra lỗi khi cập nhật lịch nhắc nhở');
+    }
+  };
+
   const handleAddNew = () => {
     navigation.navigate('GuardianEditor', {
       mode: 'create',
@@ -276,17 +350,22 @@ export default function PatientDetailScreen({ route, navigation }) {
             </View>
           ) : (
             dayMedications.map((medication, medIndex) => (
-              <MedicationCard
+              <TouchableOpacity 
                 key={medIndex}
-                name={medication.medicine?.name || 'Không rõ tên'}
-                dosage={medication.dosage || ''}
-                quantity={`${medication.frequencyperday || 1} lần/ngày`}
-                status="pending"
-                takenInfo={medication.prescriptionschedule?.timeofday ? `Uống lúc ${medication.prescriptionschedule.timeofday.substring(0, 5)}` : ''}
-                onTake={null}
-                onSkip={null}
-                onDelete={() => handleDelete(medication)}
-              />
+                onPress={() => handleEditTime(medication)}
+                activeOpacity={0.7}
+              >
+                <MedicationCard
+                  name={medication.medicine?.name || 'Không rõ tên'}
+                  dosage={medication.dosage || ''}
+                  quantity={`${medication.frequencyperday || 1} lần/ngày`}
+                  status="pending"
+                  takenInfo={medication.prescriptionschedule?.timeofday ? `Uống lúc ${medication.prescriptionschedule.timeofday.substring(0, 5)}` : ''}
+                  onTake={null}
+                  onSkip={null}
+                  onDelete={() => handleDelete(medication)}
+                />
+              </TouchableOpacity>
             ))
           )}
         </View>
@@ -371,6 +450,59 @@ export default function PatientDetailScreen({ route, navigation }) {
           )}
         </View>
       </ScrollView>
+
+      {/* Edit Time Modal */}
+      <Modal
+        visible={showEditModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chỉnh sửa mốc giờ</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.modalLabel}>Thời gian nhắc nhở</Text>
+              <TimePicker
+                value={editingTime}
+                onTimeChange={(time) => setEditingTime(time)}
+              />
+              
+              <View style={styles.modalSpacer} />
+              
+              <Text style={styles.modalLabel}>Tần suất lặp lại</Text>
+              <RepeatPatternPicker
+                selectedPattern={editingRepeatPattern.pattern}
+                interval={editingRepeatPattern.interval}
+                dayOfWeek={editingRepeatPattern.dayOfWeek}
+                dayOfMonth={editingRepeatPattern.dayOfMonth}
+                onPatternChange={(data) => setEditingRepeatPattern(data)}
+              />
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton}
+                onPress={updateScheduleTime}
+              >
+                <Text style={styles.saveButtonText}>Lưu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -528,5 +660,70 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 40,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    width: '85%',
+    maxWidth: 400,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  modalBody: {
+    marginBottom: 24,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: 12,
+  },
+  modalSpacer: {
+    height: 24,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.white,
   },
 });
