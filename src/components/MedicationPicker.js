@@ -65,6 +65,7 @@ export default function MedicationPicker({ onSelect, selectedMed }) {
     
     // Transform backend data to match EditorScreen expectations
     const transformedMed = {
+      medicineid: med.id, // Add medicineid for API compatibility
       id: med.id,
       name: med.name,
       strength: med.strength,
