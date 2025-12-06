@@ -3,6 +3,8 @@ import { View, ScrollView, StyleSheet, Alert, Text, ActivityIndicator } from 're
 import { getAlarmSoundForMedication, stopAlarmSound } from '../services/alarmService';
 import { useFocusEffect } from '@react-navigation/native';
 import Dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import { Colors } from '../theme/colors';
 import DayCarousel from '../components/DayCarousel';
 import SectionHeader from '../components/SectionHeader';
@@ -12,6 +14,11 @@ import useClock from '../hooks/useClock';
 import { getPrescriptions, getPrescriptionSchedules, getMedicines, deletePrescription, createIntakeLog, getIntakeLogs } from '../services/auth';
 import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
 import SettingsScreen from './SettingsScreen';
+
+// Configure dayjs for Vietnam timezone
+Dayjs.extend(utc);
+Dayjs.extend(timezone);
+Dayjs.tz.setDefault('Asia/Ho_Chi_Minh');
 
 
 export default function HomeScreen({ navigation, route, onLogout }) {
@@ -312,11 +319,15 @@ export default function HomeScreen({ navigation, route, onLogout }) {
       console.log('=== MARK TAKEN ===');
       console.log('Medication:', medication);
       
+      // Build actiontime from scheduled reminder time (medication.time) and current date
+      const scheduledTime = `${date.format('YYYY-MM-DD')}T${medication.time}:00`;
+      console.log('Scheduled reminder time:', scheduledTime);
+      
       // Call API to log intake
       const intakeData = {
         prescriptionid: medication.prescriptionId,
         scheduleid: medication.scheduleId,
-        actiontime: now.toISOString(), // Current time in ISO format
+        actiontime: scheduledTime, // Use scheduled reminder time
         action: 'taken',
         confirmedBy: 'user',
         notes: medication.notes || ''
@@ -421,10 +432,22 @@ export default function HomeScreen({ navigation, route, onLogout }) {
     try {
       console.log(`Logging intake for prescription ${prescriptionId}, schedule ${scheduleId}`);
       
+      // Find the medication to get its scheduled time
+      const medication = data.find(med => 
+        med.prescriptionId === prescriptionId && med.scheduleId === scheduleId
+      );
+      
+      // Build actiontime from scheduled reminder time
+      const scheduledTime = medication 
+        ? `${date.format('YYYY-MM-DD')}T${medication.time}:00`
+        : Dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DDTHH:mm:ss');
+      
+      console.log('Logging intake at scheduled time:', scheduledTime);
+      
       const result = await createIntakeLog({
         prescriptionid: prescriptionId,
         scheduleid: scheduleId,
-        actiontime: new Date().toISOString(),
+        actiontime: scheduledTime,
         action: 'taken',
         confirmedBy: 'user',
         notes: '',

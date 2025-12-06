@@ -161,7 +161,7 @@ export default function PatientDetailScreen({ route, navigation }) {
         const today = dayjs();
         const todayStr = today.format('YYYY-MM-DD');
         
-        // Update medication status based on logs
+        // Update medication status based on logs - ONLY for today
         combinedMedications.forEach(med => {
           // Find matching log for this medication today
           const matchingLog = logs.find(log => {
@@ -171,12 +171,14 @@ export default function PatientDetailScreen({ route, navigation }) {
               return false;
             }
             
-            // Check if actiontime is today
-            const logDate = dayjs(log.actiontime).format('YYYY-MM-DD');
+            // Extract date from actiontime (format: "2025-12-06T13:06:28.672")
+            // Use substring to avoid timezone issues
+            const actiontimeStr = log.actiontime || '';
+            const logDate = actiontimeStr.substring(0, 10); // Get "YYYY-MM-DD"
             const isToday = logDate === todayStr;
             
             if (isToday) {
-              console.log(`Found matching log for prescription ${med.prescriptionid}: schedule=${log.scheduleid}, date=${logDate}`);
+              console.log(`Found matching log for prescription ${med.prescriptionid}: schedule=${log.scheduleid}, date=${logDate}, actiontime=${log.actiontime}`);
             }
             
             return isToday;
@@ -184,7 +186,9 @@ export default function PatientDetailScreen({ route, navigation }) {
           
           if (matchingLog) {
             med.status = 'taken';
-            med.takenAt = dayjs(matchingLog.actiontime).format('H:mm');
+            // Extract time from actiontime
+            const timeStr = matchingLog.actiontime.substring(11, 16); // Get "HH:MM" from "YYYY-MM-DDTHH:MM:SS"
+            med.takenAt = timeStr;
             console.log(`Marked prescription ${med.prescriptionid} as taken at ${med.takenAt}`);
           }
         });
@@ -343,18 +347,18 @@ export default function PatientDetailScreen({ route, navigation }) {
       const dayMedications = medications.filter(med => {
         if (!med.prescriptionschedule) return false;
         
-        // Validate start date and end date
-        const today = dayjs();
+        // Validate start date and end date for this specific day
+        const currentDay = day.date; // The day we're checking
         const startDate = med.startdate ? dayjs(med.startdate) : null;
         const endDate = med.enddate ? dayjs(med.enddate) : null;
         
-        // Skip if prescription hasn't started yet
-        if (startDate && today.isBefore(startDate, 'day')) {
+        // Skip if prescription hasn't started yet on this day
+        if (startDate && currentDay.isBefore(startDate, 'day')) {
           return false;
         }
         
-        // Skip if prescription has ended
-        if (endDate && today.isAfter(endDate, 'day')) {
+        // Skip if prescription has ended before this day
+        if (endDate && currentDay.isAfter(endDate, 'day')) {
           return false;
         }
         
@@ -402,12 +406,12 @@ export default function PatientDetailScreen({ route, navigation }) {
                   name={medication.medicine?.name || 'Không rõ tên'}
                   dosage={medication.dosage || ''}
                   quantity={`${medication.frequencyperday || 1} lần/ngày`}
-                  status={medication.status || 'pending'}
+                  status={day.isToday ? (medication.status || 'pending') : 'pending'}
                   takenInfo={
-                    medication.status === 'taken' && medication.takenAt
+                    day.isToday && medication.status === 'taken' && medication.takenAt
                       ? `Đã uống lúc ${medication.takenAt}`
                       : (medication.prescriptionschedule?.timeofday 
-                          ? `Uống lúc ${medication.prescriptionschedule.timeofday.substring(0, 5)}` 
+                          ? ` ${medication.prescriptionschedule.timeofday.substring(0, 5)}` 
                           : '')
                   }
                   onTake={null}
