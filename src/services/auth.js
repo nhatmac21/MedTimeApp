@@ -651,10 +651,16 @@ export const createIntakeLog = async (intakeData) => {
   }
 };
 
-export const getIntakeLogs = async (pageNumber = 1, pageSize = 100) => {
+export const getIntakeLogs = async (pageNumber = 1, pageSize = 100, patientId = null) => {
   try {
     console.log('=== GET INTAKE LOGS ===');
-    const result = await apiRequest(`/intakelog?pageNumber=${pageNumber}&pageSize=${pageSize}`, {
+    let endpoint = `/intakelog?pageNumber=${pageNumber}&pageSize=${pageSize}`;
+    if (patientId) {
+      endpoint += `&patientId=${patientId}`;
+      console.log('Loading intake logs for patient:', patientId);
+    }
+    
+    const result = await apiRequest(endpoint, {
       method: 'GET',
     });
     

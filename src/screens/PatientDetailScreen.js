@@ -16,7 +16,7 @@ import { Colors } from '../theme/colors';
 import MedicationCard from '../components/MedicationCard';
 import TimePicker from '../components/TimePicker';
 import RepeatPatternPicker from '../components/RepeatPatternPicker';
-import { getAuthToken, getMedicines } from '../services/auth';
+import { getAuthToken, getMedicines, getIntakeLogs } from '../services/auth';
 
 const API_BASE_URL = 'https://medtime-be.onrender.com/api';
 import { useFocusEffect } from '@react-navigation/native';
@@ -145,8 +145,51 @@ export default function PatientDetailScreen({ route, navigation }) {
               customringtone: mainSchedule.customringtone,
             },
             allSchedules: prescriptionSchedules, // Keep all schedules for reference
+            status: 'pending', // Default status, will be updated from intake logs
           });
         }
+      }
+
+      // Load intake logs for this patient
+      console.log('Loading intake logs for patient:', patient.patientid);
+      const intakeLogsResult = await getIntakeLogs(1, 100, patient.patientid);
+      
+      if (intakeLogsResult.success && intakeLogsResult.data?.items) {
+        const logs = intakeLogsResult.data.items;
+        console.log(`Loaded ${logs.length} intake logs for patient`);
+        
+        const today = dayjs();
+        const todayStr = today.format('YYYY-MM-DD');
+        
+        // Update medication status based on logs
+        combinedMedications.forEach(med => {
+          // Find matching log for this medication today
+          const matchingLog = logs.find(log => {
+            // Check if prescriptionid and scheduleid match
+            if (log.prescriptionid !== med.prescriptionid || 
+                log.scheduleid !== med.prescriptionschedule?.scheduleid) {
+              return false;
+            }
+            
+            // Check if actiontime is today
+            const logDate = dayjs(log.actiontime).format('YYYY-MM-DD');
+            const isToday = logDate === todayStr;
+            
+            if (isToday) {
+              console.log(`Found matching log for prescription ${med.prescriptionid}: schedule=${log.scheduleid}, date=${logDate}`);
+            }
+            
+            return isToday;
+          });
+          
+          if (matchingLog) {
+            med.status = 'taken';
+            med.takenAt = dayjs(matchingLog.actiontime).format('H:mm');
+            console.log(`Marked prescription ${med.prescriptionid} as taken at ${med.takenAt}`);
+          }
+        });
+      } else {
+        console.log('No intake logs found or failed to load for patient');
       }
 
       setMedications(combinedMedications);
@@ -359,8 +402,14 @@ export default function PatientDetailScreen({ route, navigation }) {
                   name={medication.medicine?.name || 'Không rõ tên'}
                   dosage={medication.dosage || ''}
                   quantity={`${medication.frequencyperday || 1} lần/ngày`}
-                  status="pending"
-                  takenInfo={medication.prescriptionschedule?.timeofday ? `Uống lúc ${medication.prescriptionschedule.timeofday.substring(0, 5)}` : ''}
+                  status={medication.status || 'pending'}
+                  takenInfo={
+                    medication.status === 'taken' && medication.takenAt
+                      ? `Đã uống lúc ${medication.takenAt}`
+                      : (medication.prescriptionschedule?.timeofday 
+                          ? `Uống lúc ${medication.prescriptionschedule.timeofday.substring(0, 5)}` 
+                          : '')
+                  }
                   onTake={null}
                   onSkip={null}
                   onDelete={() => handleDelete(medication)}
