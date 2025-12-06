@@ -651,6 +651,26 @@ export const createIntakeLog = async (intakeData) => {
   }
 };
 
+export const getIntakeLogs = async (pageNumber = 1, pageSize = 100) => {
+  try {
+    console.log('=== GET INTAKE LOGS ===');
+    const result = await apiRequest(`/intakelog?pageNumber=${pageNumber}&pageSize=${pageSize}`, {
+      method: 'GET',
+    });
+    
+    console.log('Get Intake Logs Result:', result);
+    
+    if (result.success) {
+      return { success: true, data: result.data };
+    } else {
+      return { success: false, error: result.error || 'Không thể tải lịch sử uống thuốc' };
+    }
+  } catch (error) {
+    console.log('Get Intake Logs Error:', error);
+    return { success: false, error: 'Lỗi kết nối, vui lòng thử lại' };
+  }
+};
+
 // Medicine API functions
 export const getMedicines = async (pageNumber = 1, pageSize = 50) => {
   try {

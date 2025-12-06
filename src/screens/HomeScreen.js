@@ -9,7 +9,7 @@ import SectionHeader from '../components/SectionHeader';
 import MedicationCard from '../components/MedicationCard';
 import AlarmModal from '../components/AlarmModal';
 import useClock from '../hooks/useClock';
-import { getPrescriptions, getPrescriptionSchedules, getMedicines, deletePrescription, createIntakeLog } from '../services/auth';
+import { getPrescriptions, getPrescriptionSchedules, getMedicines, deletePrescription, createIntakeLog, getIntakeLogs } from '../services/auth';
 import { scheduleReminder, buildDateFromTime, cancelAllReminders } from '../services/notifications';
 import SettingsScreen from './SettingsScreen';
 
@@ -134,12 +134,50 @@ export default function HomeScreen({ navigation, route, onLogout }) {
               dosage: prescription.dosage,
               notes: prescription.notes,
               time: schedule.timeofday ? schedule.timeofday.substring(0, 5) : '08:00', // HH:mm format
-              status: 'pending', // Default status, can be updated later
+              status: 'pending', // Default status, will be updated from intake logs
               notificationEnabled: schedule.notificationenabled,
               alarmSound: alarmSound
             });
           }
         }
+      }
+
+      // Load intake logs and update medication status
+      console.log('Loading intake logs...');
+      const intakeLogsResult = await getIntakeLogs(1, 100);
+      
+      if (intakeLogsResult.success && intakeLogsResult.data?.items) {
+        const logs = intakeLogsResult.data.items;
+        console.log(`Loaded ${logs.length} intake logs`);
+        
+        // Update medication status based on logs
+        medications.forEach(med => {
+          // Find matching log for this medication on selected date
+          const matchingLog = logs.find(log => {
+            // Check if prescriptionid and scheduleid match
+            if (log.prescriptionid !== med.prescriptionId || log.scheduleid !== med.scheduleId) {
+              return false;
+            }
+            
+            // Check if actiontime is on the selected date
+            const logDate = Dayjs(log.actiontime).format('YYYY-MM-DD');
+            const isMatchingDate = logDate === selectedDateStr;
+            
+            if (isMatchingDate) {
+              console.log(`Found matching log for med ${med.name}: prescription=${log.prescriptionid}, schedule=${log.scheduleid}, date=${logDate}`);
+            }
+            
+            return isMatchingDate;
+          });
+          
+          if (matchingLog) {
+            med.status = 'taken';
+            med.takenAt = Dayjs(matchingLog.actiontime).format('H:mm');
+            console.log(`Marked ${med.name} as taken at ${med.takenAt}`);
+          }
+        });
+      } else {
+        console.log('No intake logs found or failed to load');
       }
 
       setData(medications);
@@ -394,6 +432,8 @@ export default function HomeScreen({ navigation, route, onLogout }) {
 
       if (result.success) {
         console.log('Intake logged successfully');
+        // Reload medications to update status
+        loadMedicationsForDate(date, false);
       } else {
         console.log('Failed to log intake:', result.error);
       }
